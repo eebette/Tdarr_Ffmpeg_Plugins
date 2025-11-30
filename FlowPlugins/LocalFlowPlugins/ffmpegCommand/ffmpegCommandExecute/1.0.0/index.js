@@ -109,13 +109,17 @@ var getCodecSelectorForStream = function (streams, stream) {
     if (!typeSelector) {
         return "-c:".concat(getOuputStreamIndex(streams, stream));
     }
-    return "-c:".concat(typeSelector, ":").concat(getOuputStreamTypeIndex(streams, stream));
+    return "-c:".concat(typeSelector);
 };
 var normalizeCodecSelectors = function (outputArgs, streams, stream) {
     var codecSelector = getCodecSelectorForStream(streams, stream);
     return outputArgs.map(function (arg) {
         if (/^-c:\d+$/.test(arg)) {
             return codecSelector;
+        }
+        if (/^-c:[a-z]+:\d+$/.test(arg)) {
+            var parts = arg.split(':');
+            return "-c:".concat(parts[1]);
         }
         return arg;
     });
@@ -125,11 +129,11 @@ var normalizeMapArgs = function (mapArgs, streams, stream) {
     if (!typeSelector) {
         return mapArgs;
     }
+    var mapTarget = "0:".concat(typeSelector, ":").concat(getOuputStreamTypeIndex(streams, stream)).concat(typeSelector === 'v' ? '' : '?');
     return mapArgs.map(function (arg, idx) {
         var isMapValue = idx > 0 && mapArgs[idx - 1] === '-map';
         if (isMapValue && /^\d+:\d+$/.test(arg)) {
-            var inputIndex = arg.split(':')[0];
-            return "".concat(inputIndex, ":").concat(typeSelector, ":").concat(getOuputStreamTypeIndex(streams, stream));
+            return mapTarget;
         }
         return arg;
     });
