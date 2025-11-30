@@ -52,7 +52,7 @@ var flowUtils_1 = require("../../../../FlowHelpers/1.0.0/interfaces/flowUtils");
 /* eslint no-plusplus: ["error", { "allowForLoopAfterthoughts": true }] */
 var details = function () { return ({
     name: 'Execute',
-    description: 'Execute the created FFmpeg command',
+    description: 'Execute the created FFmpeg command, ensuring filter args are ordered before mapping args',
     style: {
         borderColor: 'green',
     },
@@ -96,6 +96,44 @@ var getOuputStreamTypeIndex = function (streams, stream) {
     return index;
 };
 var isFilterArgument = function (arg) { return arg === '-vf' || arg.startsWith('-vf:') || arg.startsWith('-filter:') || arg === '-filter_complex' || arg.startsWith('-filter_complex:'); };
+var isMetadataArgument = function (arg) { return arg === '-metadata' || arg.startsWith('-metadata:'); };
+var codecTypeToSelector = {
+    video: 'v',
+    audio: 'a',
+    subtitle: 's',
+    data: 'd',
+    attachment: 't',
+};
+var getCodecSelectorForStream = function (streams, stream) {
+    var typeSelector = codecTypeToSelector[stream.codec_type];
+    if (!typeSelector) {
+        return "-c:".concat(getOuputStreamIndex(streams, stream));
+    }
+    return "-c:".concat(typeSelector, ":").concat(getOuputStreamTypeIndex(streams, stream));
+};
+var normalizeCodecSelectors = function (outputArgs, streams, stream) {
+    var codecSelector = getCodecSelectorForStream(streams, stream);
+    return outputArgs.map(function (arg) {
+        if (/^-c:\d+$/.test(arg)) {
+            return codecSelector;
+        }
+        return arg;
+    });
+};
+var normalizeMapArgs = function (mapArgs, streams, stream) {
+    var typeSelector = codecTypeToSelector[stream.codec_type];
+    if (!typeSelector) {
+        return mapArgs;
+    }
+    return mapArgs.map(function (arg, idx) {
+        var isMapValue = idx > 0 && mapArgs[idx - 1] === '-map';
+        if (isMapValue && /^\d+:\d+$/.test(arg)) {
+            var inputIndex = arg.split(':')[0];
+            return "".concat(inputIndex, ":").concat(typeSelector, ":").concat(getOuputStreamTypeIndex(streams, stream));
+        }
+        return arg;
+    });
+};
 var moveFilterArgsBeforeMaps = function (args) {
     var filterArgs = [];
     var argsWithoutFilters = [];
@@ -121,6 +159,39 @@ var moveFilterArgsBeforeMaps = function (args) {
     }
     argsWithoutFilters.splice.apply(argsWithoutFilters, __spreadArray([firstMapIndex, 0], filterArgs, false));
     return argsWithoutFilters;
+};
+var moveMetadataArgsBeforeMaps = function (args) {
+    var metadataArgs = [];
+    var argsWithoutMetadata = [];
+    for (var i = 0; i < args.length; i += 1) {
+        var arg = args[i];
+        if (isMetadataArgument(arg)) {
+            metadataArgs.push(arg);
+            if (i + 1 < args.length) {
+                metadataArgs.push(args[i + 1]);
+                i += 1;
+            }
+        }
+        else {
+            argsWithoutMetadata.push(arg);
+        }
+    }
+    if (metadataArgs.length === 0) {
+        return __spreadArray([], args, true);
+    }
+    var firstMapIndex = argsWithoutMetadata.findIndex(function (value) { return value === '-map'; });
+    if (firstMapIndex === -1) {
+        return __spreadArray([], args, true);
+    }
+    var lastFilterIndex = -1;
+    for (var j = 0; j < firstMapIndex; j += 1) {
+        if (isFilterArgument(argsWithoutMetadata[j])) {
+            lastFilterIndex = j;
+        }
+    }
+    var insertIndex = lastFilterIndex === -1 ? firstMapIndex : lastFilterIndex + 1;
+    argsWithoutMetadata.splice.apply(argsWithoutMetadata, __spreadArray([insertIndex, 0], metadataArgs, false));
+    return argsWithoutMetadata;
 };
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
@@ -164,13 +235,12 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         }
                         return arg;
                     });
-                    cliArgs.push.apply(cliArgs, stream.mapArgs);
-                    if (stream.outputArgs.length === 0) {
-                        cliArgs.push("-c:".concat(getOuputStreamIndex(streams, stream)), 'copy');
-                    }
-                    else {
-                        cliArgs.push.apply(cliArgs, stream.outputArgs);
-                    }
+                    var mapArgs = normalizeMapArgs(stream.mapArgs, streams, stream);
+                    cliArgs.push.apply(cliArgs, mapArgs);
+                    var outputArgsForStream = stream.outputArgs.length === 0
+                        ? [getCodecSelectorForStream(streams, stream), 'copy']
+                        : normalizeCodecSelectors(stream.outputArgs, streams, stream);
+                    cliArgs.push.apply(cliArgs, outputArgsForStream);
                     inputArgs.push.apply(inputArgs, stream.inputArgs);
                 };
                 for (i = 0; i < streams.length; i += 1) {
@@ -183,6 +253,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     shouldProcess = true;
                 }
                 cliArgs = moveFilterArgsBeforeMaps(cliArgs);
+                cliArgs = moveMetadataArgsBeforeMaps(cliArgs);
                 if (!shouldProcess) {
                     args.jobLog('No need to process file, already as required');
                     return [2 /*return*/, {
