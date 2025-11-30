@@ -15,10 +15,10 @@ if [[ ! -d "$tdarr_root" ]]; then
 fi
 
 urls=(
-  "https://codeload.github.com/eebette/Tdarr_DolbyVision_Plugins/tar.gz/refs/heads/main"
-  "https://codeload.github.com/eebette/Tdarr_DolbyVision_Plugins/tar.gz/refs/heads/master"
-  "https://github.com/eebette/Tdarr_DolbyVision_Plugins/archive/refs/heads/main.tar.gz"
-  "https://github.com/eebette/Tdarr_DolbyVision_Plugins/archive/refs/heads/master.tar.gz"
+  "https://codeload.github.com/eebette/Tdarr_Ffmpeg_Plugins/tar.gz/refs/heads/main"
+  "https://codeload.github.com/eebette/Tdarr_Ffmpeg_Plugins/tar.gz/refs/heads/master"
+  "https://github.com/eebette/Tdarr_Ffmpeg_Plugins/archive/refs/heads/main.tar.gz"
+  "https://github.com/eebette/Tdarr_Ffmpeg_Plugins/archive/refs/heads/master.tar.gz"
 )
 tmp_dir="$(mktemp -d)"
 cleanup() { rm -rf "$tmp_dir"; }
