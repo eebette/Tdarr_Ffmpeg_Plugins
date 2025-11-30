@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+  echo "Usage: $0 /path/to/tdarr/server" >&2
+  exit 1
+fi
+
+tdarr_root="$1"
+
+if [[ ! -d "$tdarr_root" ]]; then
+  echo "Error: '$tdarr_root' is not a directory" >&2
+  exit 1
+fi
+
+urls=(
+  "https://codeload.github.com/eebette/Tdarr_DolbyVision_Plugins/tar.gz/refs/heads/main"
+  "https://codeload.github.com/eebette/Tdarr_DolbyVision_Plugins/tar.gz/refs/heads/master"
+  "https://github.com/eebette/Tdarr_DolbyVision_Plugins/archive/refs/heads/main.tar.gz"
+  "https://github.com/eebette/Tdarr_DolbyVision_Plugins/archive/refs/heads/master.tar.gz"
+)
+tmp_dir="$(mktemp -d)"
+cleanup() { rm -rf "$tmp_dir"; }
+trap cleanup EXIT
+
+archive_path="$tmp_dir/repo.tar.gz"
+
+download_ok=false
+for archive_url in "${urls[@]}"; do
+  echo "Attempting download: $archive_url"
+  if command -v curl >/dev/null 2>&1; then
+    if curl -fL "$archive_url" -o "$archive_path"; then
+      download_ok=true
+    fi
+  elif command -v wget >/dev/null 2>&1; then
+    if wget -O "$archive_path" "$archive_url"; then
+      download_ok=true
+    fi
+  else
+    echo "Error: need curl or wget to download archives." >&2
+    exit 1
+  fi
+
+  if $download_ok && tar -tzf "$archive_path" >/dev/null 2>&1; then
+    echo "Download and archive check succeeded."
+    break
+  else
+    echo "Warning: failed to fetch or validate archive from $archive_url, trying next..."
+    download_ok=false
+  fi
+done
+
+if ! $download_ok; then
+  echo "Error: could not download a valid archive from any known URL." >&2
+  exit 1
+fi
+
+echo "Extracting archive..."
+tar -xzf "$archive_path" -C "$tmp_dir"
+
+# Locate FlowPlugins directory inside the extracted tree
+source_dir="$(find "$tmp_dir" -maxdepth 2 -type d -name FlowPlugins | head -n 1 || true)"
+if [[ -z "$source_dir" || ! -d "$source_dir" ]]; then
+  echo "Error: source directory not found after extract." >&2
+  exit 1
+fi
+
+dest_dir="$tdarr_root/Tdarr/Plugins/FlowPlugins"
+
+mkdir -p "$dest_dir"
+
+# Only copy plugin entrypoints (index.js), ignore other files
+rsync -a \
+  --include='*/' \
+  --include='index.js' \
+  --exclude='*' \
+  "$source_dir/" "$dest_dir/"
+
+echo "Installed FlowPlugins into: $dest_dir"
