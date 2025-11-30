@@ -190,7 +190,7 @@ var moveMetadataArgsBeforeMaps = function (args) {
     var lastFilterIndex = -1;
     for (var j = 0; j < firstMapIndex; j += 1) {
         if (isFilterArgument(argsWithoutMetadata[j])) {
-            lastFilterIndex = j;
+            lastFilterIndex = j + 1 < argsWithoutMetadata.length ? j + 1 : j;
         }
     }
     var insertIndex = lastFilterIndex === -1 ? firstMapIndex : lastFilterIndex + 1;
