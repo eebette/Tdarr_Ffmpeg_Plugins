@@ -44,6 +44,7 @@ Prereqs: `curl` or `wget`, and `tar` (standard on most distros).
 - `subtitleExtractToSrt/Subtitles: Extract/OCR to SRT`: Extracts one subtitle per language and per type (main/commentary/forced), prefers text, OCRs PGS to SRT (using dotnet/PgsToSrt from DV tools), injects new SRTs as mapped subtitle streams, preserves originals, and avoids duplicate SRTs per language/type (temp files cleaned after mux).
 - `subtitleFixEnglish/Subtitles: Fix English OCR`: Cleans English SRTs generated upstream (OCR typos and spacing) before muxing.
 - `subtitleLanguageFilter/Filter Subtitles by Language`: Removes subtitle streams not matching a user-provided comma-separated language list, reading language from metadata or stream outputs.
+- `subtitleConvertToMovText/Subtitles: Convert to mov_text (MP4)`: Converts mapped text subtitles (e.g., SRT/ASS) to mov_text/tx3g so MP4 muxing succeeds and drops image-based subtitles MP4 cannot store.
 - `subtitleReorder/Reorder Subtitles`: Reorders subtitle streams by codec and/or language preference (dropdown precedence), keeps the first non-commentary as default, and preserves forced flags.
 
 ### Recommended subtitle flow
