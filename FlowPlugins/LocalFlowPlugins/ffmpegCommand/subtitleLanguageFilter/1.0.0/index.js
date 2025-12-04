@@ -1,6 +1,15 @@
 "use strict";
 var flowUtils = require("../../../../FlowHelpers/1.0.0/interfaces/flowUtils");
 var normalize = function (value) { return (value || "").toString().toLowerCase().trim(); };
+var normalizeInputs = function (inputs) {
+    if (Array.isArray(inputs)) {
+        return inputs;
+    }
+    if (inputs && typeof inputs === "object") {
+        return Object.keys(inputs).map(function (key) { return ({ name: key, value: inputs[key] }); });
+    }
+    return [];
+};
 var normalizeList = function (value) {
     return normalize(value)
         .split(",")
@@ -55,9 +64,10 @@ var getStreams = function (fileObj) {
 };
 var plugin = function (args) {
     var lib = require("../../../../../methods/lib")();
-    args.inputs = lib.loadDefaultValues(args.inputs, details);
+    var inputs = lib.loadDefaultValues(normalizeInputs(args.inputs), details);
+    args.inputs = inputs;
     flowUtils.checkFfmpegCommandInit(args);
-    var languageInput = normalize(args.inputs.find(function (i) { return i.name === "Languages"; }).value || "");
+    var languageInput = normalize(inputs.find(function (i) { return i.name === "Languages"; }).value || "");
     var languages = normalizeList(languageInput);
     var streams = args.variables.ffmpegCommand.streams || [];
     if (streams.length === 0) {

@@ -4,6 +4,22 @@ var path = require("path");
 var child_process_1 = require("child_process");
 var flowUtils = require("../../../../FlowHelpers/1.0.0/interfaces/flowUtils");
 var normalize = function (value) { return (value || "").toString().toLowerCase().trim(); };
+var normalizeInputs = function (inputs) {
+    if (Array.isArray(inputs)) {
+        return inputs;
+    }
+    if (inputs && typeof inputs === "object") {
+        return Object.keys(inputs).map(function (key) { return ({ name: key, value: inputs[key] }); });
+    }
+    return [];
+};
+var getInputValue = function (inputs, name, fallback) {
+    var input = inputs.find(function (i) { return i.name === name; });
+    if (!input || typeof input.value === "undefined") {
+        return fallback;
+    }
+    return input.value;
+};
 var preferredTextCodecs = ["subrip", "ass", "ssa", "srt", "text", "mov_text", "webvtt"];
 var tessMap = {
     eng: "eng", en: "eng",
@@ -102,10 +118,11 @@ exports.details = details;
 var pickLanguageSet = function (input) { return input.length === 0 ? null : new Set(input); };
 var plugin = function (args) { return (function () {
     var lib = require("../../../../../methods/lib")();
-    args.inputs = lib.loadDefaultValues(args.inputs, details);
+    var inputs = lib.loadDefaultValues(normalizeInputs(args.inputs), details);
+    args.inputs = inputs;
     flowUtils.checkFfmpegCommandInit(args);
-    var dotnetPath = (args.inputs.find(function (i) { return i.name === "Dotnet Path"; }) || { value: "" }).value.toString().trim();
-    var pgsToSrtPath = (args.inputs.find(function (i) { return i.name === "PgsToSrt Path"; }) || { value: "" }).value.toString().trim();
+    var dotnetPath = (getInputValue(inputs, "Dotnet Path", "") || "").toString().trim();
+    var pgsToSrtPath = (getInputValue(inputs, "PgsToSrt Path", "") || "").toString().trim();
     if (!dotnetPath || !pgsToSrtPath) {
         args.jobLog("Missing dotnet or PgsToSrt paths; run Install DV Tools first.");
         return {
@@ -114,7 +131,7 @@ var plugin = function (args) { return (function () {
             variables: args.variables,
         };
     }
-    var languageFilter = normalize(args.inputs.find(function (i) { return i.name === "Languages"; }).value || "");
+    var languageFilter = normalize(getInputValue(inputs, "Languages", "") || "");
     var languageSet = pickLanguageSet(languageFilter
         .split(",")
         .map(function (p) { return p.trim(); })

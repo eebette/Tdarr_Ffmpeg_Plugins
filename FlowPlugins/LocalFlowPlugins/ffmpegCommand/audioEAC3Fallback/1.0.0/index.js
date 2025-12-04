@@ -41,6 +41,15 @@ exports.details = details;
 var normalize = function (value) {
     return (value || "").toString().toLowerCase().replace(/[\s_-]/g, "");
 };
+var normalizeInputs = function (inputs) {
+    if (Array.isArray(inputs)) {
+        return inputs;
+    }
+    if (inputs && typeof inputs === "object") {
+        return Object.keys(inputs).map(function (key) { return ({ name: key, value: inputs[key] }); });
+    }
+    return [];
+};
 var getStreams = function (fileObj) {
     var ffprobe = fileObj.ffprobeData
         || fileObj.ffProbeData
@@ -204,7 +213,8 @@ var buildAudioPlan = function (audioStreams, hdStreams, matches, conversions) {
 };
 var plugin = function (args) {
     var lib = require("../../../../../methods/lib")();
-    args.inputs = lib.loadDefaultValues(args.inputs, details);
+    var inputs = lib.loadDefaultValues(normalizeInputs(args.inputs), details);
+    args.inputs = inputs;
     flowUtils.checkFfmpegCommandInit(args);
     var allStreams = getStreams(args.inputFileObj);
     var videoStreams = allStreams.filter(function (s) { return s.codec_type === "video"; });

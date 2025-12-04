@@ -1,6 +1,15 @@
 "use strict";
 var flowUtils = require("../../../../FlowHelpers/1.0.0/interfaces/flowUtils");
 var normalize = function (value) { return (value || "").toString().toLowerCase(); };
+var normalizeInputs = function (inputs) {
+    if (Array.isArray(inputs)) {
+        return inputs;
+    }
+    if (inputs && typeof inputs === "object") {
+        return Object.keys(inputs).map(function (key) { return ({ name: key, value: inputs[key] }); });
+    }
+    return [];
+};
 var details = function () { return ({
     name: "Video: Standardize Codec Name",
     description: "Sets video stream titles to '<resolution> <CODEC> <HDR/SDR>' or 'Dolby Vision Profile x.x (HDR10/HDR)'.",
@@ -104,7 +113,8 @@ var setMetadataArg = function (outputArgs, title) {
 };
 var plugin = function (args) {
     var lib = require("../../../../../methods/lib")();
-    args.inputs = lib.loadDefaultValues(args.inputs, details);
+    var inputs = lib.loadDefaultValues(normalizeInputs(args.inputs), details);
+    args.inputs = inputs;
     flowUtils.checkFfmpegCommandInit(args);
     var streams = args.variables.ffmpegCommand.streams || [];
     if (streams.length === 0) {

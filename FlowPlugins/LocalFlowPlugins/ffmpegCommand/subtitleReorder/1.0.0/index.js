@@ -9,6 +9,15 @@ var codecTypeSelector = {
     attachment: "t",
 };
 var normalize = function (value) { return (value || "").toString().toLowerCase().trim(); };
+var normalizeInputs = function (inputs) {
+    if (Array.isArray(inputs)) {
+        return inputs;
+    }
+    if (inputs && typeof inputs === "object") {
+        return Object.keys(inputs).map(function (key) { return ({ name: key, value: inputs[key] }); });
+    }
+    return [];
+};
 var normalizeList = function (value) {
     return normalize(value)
         .split(",")
@@ -122,11 +131,12 @@ var details = function () { return ({
 exports.details = details;
 var plugin = function (args) {
     var lib = require("../../../../../methods/lib")();
-    args.inputs = lib.loadDefaultValues(args.inputs, details);
+    var inputs = lib.loadDefaultValues(normalizeInputs(args.inputs), details);
+    args.inputs = inputs;
     flowUtils.checkFfmpegCommandInit(args);
-    var codecOrderInput = normalize(getInputValue(args.inputs, "Codec Order", ""));
-    var languageOrderInput = normalize(getInputValue(args.inputs, "Language Order", ""));
-    var precedence = getInputValue(args.inputs, "Precedence", "Codec Order");
+    var codecOrderInput = normalize(getInputValue(inputs, "Codec Order", ""));
+    var languageOrderInput = normalize(getInputValue(inputs, "Language Order", ""));
+    var precedence = getInputValue(inputs, "Precedence", "Codec Order");
     var codecOrder = normalizeList(codecOrderInput);
     var languageOrder = normalizeList(languageOrderInput);
     var allMetaStreams = getStreams(args.inputFileObj);

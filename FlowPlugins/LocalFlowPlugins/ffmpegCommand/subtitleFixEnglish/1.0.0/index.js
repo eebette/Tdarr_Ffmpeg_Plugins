@@ -3,6 +3,15 @@ var fs = require("fs");
 var path = require("path");
 var flowUtils = require("../../../../FlowHelpers/1.0.0/interfaces/flowUtils");
 var normalize = function (value) { return (value || "").toString().toLowerCase().trim(); };
+var normalizeInputs = function (inputs) {
+    if (Array.isArray(inputs)) {
+        return inputs;
+    }
+    if (inputs && typeof inputs === "object") {
+        return Object.keys(inputs).map(function (key) { return ({ name: key, value: inputs[key] }); });
+    }
+    return [];
+};
 var WORD_CORRECTIONS = {
     teh: "the",
     adn: "and",
@@ -110,7 +119,8 @@ var fixSrtFile = function (filePath) {
 };
 var plugin = function (args) {
     var lib = require("../../../../../methods/lib")();
-    args.inputs = lib.loadDefaultValues(args.inputs, details);
+    var inputs = lib.loadDefaultValues(normalizeInputs(args.inputs), details);
+    args.inputs = inputs;
     flowUtils.checkFfmpegCommandInit(args);
     var streams = args.variables.ffmpegCommand.streams || [];
     var additionalInputs = args.variables.ffmpegCommand.additionalInputs || [];

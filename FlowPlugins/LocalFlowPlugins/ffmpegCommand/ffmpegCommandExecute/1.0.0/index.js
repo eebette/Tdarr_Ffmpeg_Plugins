@@ -72,6 +72,15 @@ var details = function () { return ({
     ],
 }); };
 exports.details = details;
+var normalizeInputs = function (inputs) {
+    if (Array.isArray(inputs)) {
+        return inputs;
+    }
+    if (inputs && typeof inputs === "object") {
+        return Object.keys(inputs).map(function (key) { return ({ name: key, value: inputs[key] }); });
+    }
+    return [];
+};
 var getOuputStreamIndex = function (streams, stream) {
     var index = -1;
     for (var idx = 0; idx < streams.length; idx += 1) {
@@ -206,7 +215,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
             case 0:
                 lib = require('../../../../../methods/lib')();
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-param-reassign
-                args.inputs = lib.loadDefaultValues(args.inputs, details);
+                args.inputs = lib.loadDefaultValues(normalizeInputs(args.inputs), details);
                 (0, flowUtils_1.checkFfmpegCommandInit)(args);
                 cliArgs = [];
                 cliArgs.push('-y');
