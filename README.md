@@ -35,18 +35,19 @@ Prereqs: `curl` or `wget`, and `tar` (standard on most distros).
 
 ### Audio
 - `audioEAC3Fallback/Audio: Ensure EAC3 Fallback`: Creates an EAC3 copy for TrueHD/DTS audio when missing, skips if AAC/AC3/EAC3/FLAC is already present, and leaves stream ordering/default handling to downstream steps.
-- `audioReorder/Reorder Audio Streams`: Reorders audio by codec and/or language preference (user-configurable), sets the first non-commentary track as default, and preserves other streams.
+- `audioReorder/Reorder Audio Streams`: Reorders audio by codec and/or language preference (dropdown precedence), sets the first non-commentary track as default, and preserves other streams.
 
 ### Video
 - `videoCodecStandardize/Video: Standardize Codec Name`: Sets video stream titles like `1080p H264 SDR`, `4K HEVC HDR10`, or `4K HEVC Dolby Vision Profile 8.1 (HDR10)` based on resolution, codec, transfer, and Dolby Vision profile.
 
 ### Subtitles
-- `subtitleExtractToSrt/Subtitles: Extract/OCR to SRT`: Extracts one subtitle per language, prefers text, OCRs PGS to SRT (using dotnet/PgsToSrt from DV tools), and injects the new SRTs as mapped subtitle streams for ffmpegCommandExecute (temp files cleaned after mux).
+- `subtitleExtractToSrt/Subtitles: Extract/OCR to SRT`: Extracts one subtitle per language and per type (main/commentary/forced), prefers text, OCRs PGS to SRT (using dotnet/PgsToSrt from DV tools), injects new SRTs as mapped subtitle streams, preserves originals, and avoids duplicate SRTs per language/type (temp files cleaned after mux).
 - `subtitleFixEnglish/Subtitles: Fix English OCR`: Cleans English SRTs generated upstream (OCR typos and spacing) before muxing.
-- `subtitleLanguageFilter/Filter Subtitles by Language`: Removes subtitle streams not matching a user-provided comma-separated language list.
+- `subtitleLanguageFilter/Filter Subtitles by Language`: Removes subtitle streams not matching a user-provided comma-separated language list, reading language from metadata or stream outputs.
+- `subtitleReorder/Reorder Subtitles`: Reorders subtitle streams by codec and/or language preference (dropdown precedence), keeps the first non-commentary as default, and preserves forced flags.
 
 ### Recommended subtitle flow
-Run DV tools install (for dotnet/PgsToSrt) → `Subtitles: Extract/OCR to SRT` → `Subtitles: Fix English OCR` → `Filter Subtitles by Language` (optional) → `ffmpegCommand/Execute`.
+Run DV tools install (for dotnet/PgsToSrt) → `Subtitles: Extract/OCR to SRT` → `Subtitles: Fix English OCR` → `Filter Subtitles by Language` (optional) → `subtitleReorder/Reorder Subtitles` (optional) → `ffmpegCommand/Execute`.
 
 ## Typical flow examples 🔄
 - Pre-flight node to choose codecs/filters → build `variables.ffmpegCommand.streams` with map/output args → `ffmpegCommand/Execute` to transcode or remux.
