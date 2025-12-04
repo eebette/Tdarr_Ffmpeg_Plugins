@@ -82,28 +82,14 @@ var normalizeInputs = function (inputs) {
     return [];
 };
 var getOuputStreamIndex = function (streams, stream) {
-    var index = -1;
-    for (var idx = 0; idx < streams.length; idx += 1) {
-        if (!stream.removed) {
-            index += 1;
-        }
-        if (streams[idx].index === stream.index) {
-            break;
-        }
-    }
-    return index;
+    var filtered = streams.filter(function (s) { return !s.removed; });
+    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
+    return position === -1 ? 0 : position;
 };
 var getOuputStreamTypeIndex = function (streams, stream) {
-    var index = -1;
-    for (var idx = 0; idx < streams.length; idx += 1) {
-        if (!stream.removed && streams[idx].codec_type === stream.codec_type) {
-            index += 1;
-        }
-        if (streams[idx].index === stream.index) {
-            break;
-        }
-    }
-    return index;
+    var filtered = streams.filter(function (s) { return !s.removed && s.codec_type === stream.codec_type; });
+    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
+    return position === -1 ? 0 : position;
 };
 var isFilterArgument = function (arg) { return arg === '-vf' || arg.startsWith('-vf:') || arg.startsWith('-filter:') || arg === '-filter_complex' || arg.startsWith('-filter_complex:'); };
 var isMetadataArgument = function (arg) { return arg === '-metadata' || arg.startsWith('-metadata:'); };
