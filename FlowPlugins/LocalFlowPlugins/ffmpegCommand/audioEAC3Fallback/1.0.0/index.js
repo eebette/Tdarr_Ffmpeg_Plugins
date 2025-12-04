@@ -300,7 +300,11 @@ var plugin = function (args) {
         });
     });
     var extension = path.extname(args.inputFileObj._id || "").replace(".", "");
-    var container = args.inputFileObj.container || extension || args.variables.ffmpegCommand.container || "mkv";
+    // Respect an already chosen container; otherwise fall back to the input's container/extension.
+    var container = args.variables.ffmpegCommand.container
+        || args.inputFileObj.container
+        || extension
+        || "mkv";
     args.variables.ffmpegCommand.streams = outputStreams;
     args.variables.ffmpegCommand.overallInputArguments = [];
     args.variables.ffmpegCommand.overallOuputArguments = [];
