@@ -1,4 +1,5 @@
 "use strict";
+var fs = require("fs");
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -199,7 +200,7 @@ var moveMetadataArgsBeforeMaps = function (args) {
 };
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, cliArgs, _a, shouldProcess, streams, inputArgs, _loop_1, i, idx, outputFilePath, spawnArgs, cli, res;
+    var lib, cliArgs, _a, shouldProcess, streams, inputArgs, additionalInputs, _loop_1, i, idx, outputFilePath, spawnArgs, cli, res, tempFiles;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
@@ -211,6 +212,12 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 cliArgs.push('-y');
                 cliArgs.push('-i');
                 cliArgs.push(args.inputFileObj._id);
+                additionalInputs = args.variables.ffmpegCommand.additionalInputs || [];
+                additionalInputs.forEach(function (input) {
+                    shouldProcess = true;
+                    cliArgs.push('-i');
+                    cliArgs.push(input);
+                });
                 _a = args.variables.ffmpegCommand, shouldProcess = _a.shouldProcess, streams = _a.streams;
                 if (args.variables.ffmpegCommand.overallInputArguments.length > 0) {
                     shouldProcess = true;
@@ -300,6 +307,15 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 args.logOutcome('tSuc');
                 // eslint-disable-next-line no-param-reassign
                 args.variables.ffmpegCommand.init = false;
+                tempFiles = args.variables.ffmpegCommand.tempFiles || [];
+                tempFiles.forEach(function (filePath) {
+                    try {
+                        fs.unlinkSync(filePath);
+                    }
+                    catch (err) {
+                        args.jobLog("Cleanup warning: ".concat(filePath, " ").concat(err.message));
+                    }
+                });
                 return [2 /*return*/, {
                     outputFileObj: {
                         _id: outputFilePath,

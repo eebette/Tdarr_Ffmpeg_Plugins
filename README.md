@@ -33,6 +33,21 @@ Prereqs: `curl` or `wget`, and `tar` (standard on most distros).
 ### Command execution
 - `ffmpegCommand/Execute`: Runs FFmpeg with arguments built earlier in the flow. Respects per-stream input/output args, mapping, and container settings, and short-circuits when no processing is required.
 
+### Audio
+- `audioEAC3Fallback/Audio: Ensure EAC3 Fallback`: Creates an EAC3 copy for TrueHD/DTS audio when missing, skips if AAC/AC3/EAC3/FLAC is already present, and leaves stream ordering/default handling to downstream steps.
+- `audioReorder/Reorder Audio Streams`: Reorders audio by codec and/or language preference (user-configurable), sets the first non-commentary track as default, and preserves other streams.
+
+### Video
+- `videoCodecStandardize/Video: Standardize Codec Name`: Sets video stream titles like `1080p H264 SDR`, `4K HEVC HDR10`, or `4K HEVC Dolby Vision Profile 8.1 (HDR10)` based on resolution, codec, transfer, and Dolby Vision profile.
+
+### Subtitles
+- `subtitleExtractToSrt/Subtitles: Extract/OCR to SRT`: Extracts one subtitle per language, prefers text, OCRs PGS to SRT (using dotnet/PgsToSrt from DV tools), and injects the new SRTs as mapped subtitle streams for ffmpegCommandExecute (temp files cleaned after mux).
+- `subtitleFixEnglish/Subtitles: Fix English OCR`: Cleans English SRTs generated upstream (OCR typos and spacing) before muxing.
+- `subtitleLanguageFilter/Filter Subtitles by Language`: Removes subtitle streams not matching a user-provided comma-separated language list.
+
+### Recommended subtitle flow
+Run DV tools install (for dotnet/PgsToSrt) → `Subtitles: Extract/OCR to SRT` → `Subtitles: Fix English OCR` → `Filter Subtitles by Language` (optional) → `ffmpegCommand/Execute`.
+
 ## Typical flow examples 🔄
 - Pre-flight node to choose codecs/filters → build `variables.ffmpegCommand.streams` with map/output args → `ffmpegCommand/Execute` to transcode or remux.
 - Simple remux: set input arguments (e.g., `-an`, `-sn`), map the desired video/audio/subtitle streams with `copy` codecs, then run `ffmpegCommand/Execute` to produce a new container.
