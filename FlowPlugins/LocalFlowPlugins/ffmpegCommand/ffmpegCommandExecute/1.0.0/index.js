@@ -270,6 +270,13 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         variables: args.variables,
                     }];
                 }
+                // Respect the container of the current input if no explicit override was provided.
+                if (!args.variables.ffmpegCommand.container) {
+                    var ext = (args.inputFileObj.container
+                        || ((args.inputFileObj._id || "").split(".").pop())
+                        || "mkv").toLowerCase();
+                    args.variables.ffmpegCommand.container = ext;
+                }
                 outputFilePath = "".concat((0, fileUtils_1.getPluginWorkDir)(args), "/").concat((0, fileUtils_1.getFileName)(args.inputFileObj._id))
                     + ".".concat(args.variables.ffmpegCommand.container);
                 cliArgs.push(outputFilePath);
