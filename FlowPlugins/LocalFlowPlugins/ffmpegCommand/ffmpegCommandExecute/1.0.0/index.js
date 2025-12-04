@@ -105,17 +105,19 @@ var getCodecSelectorForStream = function (streams, stream) {
     if (!typeSelector) {
         return "-c:".concat(getOuputStreamIndex(streams, stream));
     }
-    return "-c:".concat(typeSelector);
+    return "-c:".concat(typeSelector, ":").concat(getOuputStreamTypeIndex(streams, stream));
 };
 var normalizeCodecSelectors = function (outputArgs, streams, stream) {
     var codecSelector = getCodecSelectorForStream(streams, stream);
     return outputArgs.map(function (arg) {
+        if (/^-c:[a-z]+$/.test(arg)) {
+            return codecSelector;
+        }
         if (/^-c:\d+$/.test(arg)) {
             return codecSelector;
         }
         if (/^-c:[a-z]+:\d+$/.test(arg)) {
-            var parts = arg.split(':');
-            return "-c:".concat(parts[1]);
+            return codecSelector;
         }
         return arg;
     });
