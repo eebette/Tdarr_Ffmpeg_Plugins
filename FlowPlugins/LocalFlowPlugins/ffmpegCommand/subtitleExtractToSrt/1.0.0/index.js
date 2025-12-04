@@ -17,6 +17,7 @@ var tessMap = {
     kor: "kor", ko: "kor",
     und: "eng",
 };
+var commentaryRegex = /commentary|narration|descriptive|director|producer|writer/i;
 var getStreams = function (fileObj) {
     var ffprobe = fileObj.ffprobeData
         || fileObj.ffProbeData
@@ -33,6 +34,27 @@ var getStreams = function (fileObj) {
             typeIndex: typeIndex,
         });
     });
+};
+var isCommentary = function (stream) {
+    var title = (stream.tags && (stream.tags.title || stream.tags.handler_name)) || "";
+    return commentaryRegex.test(title);
+};
+var getMapArgsForMainSubtitle = function (stream) {
+    var typeIndex = typeof stream.typeIndex === "number" ? stream.typeIndex : 0;
+    return ["-map", "0:s:".concat(typeIndex, "?")];
+};
+var makeCopyOutputArgs = function (lang, title) {
+    var outputArgs = [
+        "-c:s",
+        "copy",
+        "-metadata:s:s:{outputTypeIndex}",
+        "language=".concat(lang),
+    ];
+    if (title) {
+        outputArgs.push("-metadata:s:s:{outputTypeIndex}");
+        outputArgs.push("title=".concat(title));
+    }
+    return outputArgs;
 };
 var details = function () { return ({
     name: "Subtitles: Extract/OCR to SRT",
@@ -125,69 +147,105 @@ var plugin = function (args) { return (function () {
     var additionalInputs = args.variables.ffmpegCommand.additionalInputs || [];
     var tempFiles = args.variables.ffmpegCommand.tempFiles || [];
     var newSubtitleStreams = [];
+    var originalSubtitleStreams = [];
+    var srtSeen = new Map(); // key: lang|type
     var startIndex = additionalInputs.length + 1; // main input is 0
     var inputIdx = startIndex;
     var ffmpegBin = args.ffmpegPath || "ffmpeg";
     chosenByLang.forEach(function (streamsForLang, lang) {
-        var textStream = streamsForLang.find(function (s) { return preferredTextCodecs.includes(normalize(s.codec_name)); });
-        var target = textStream || streamsForLang[0];
-        var codec = normalize(target.codec_name || "");
-        var outFile = path.join(outDir, "".concat(baseName, "_").concat(lang, ".srt"));
-        if (preferredTextCodecs.includes(codec)) {
-            args.jobLog("Copying text subtitle to SRT for lang=".concat(lang));
-            var cmdArgs = [
-                "-y",
-                "-i",
-                args.inputFileObj._id,
-                "-map",
-                "0:".concat(target.index),
+        streamsForLang.forEach(function (orig) {
+            var mapArgs = getMapArgsForMainSubtitle(orig);
+            var copyArgs = makeCopyOutputArgs(lang, (orig.tags && orig.tags.title) || "");
+            originalSubtitleStreams.push({
+                index: orig.index,
+                codec_type: "subtitle",
+                mapArgs: mapArgs,
+                outputArgs: copyArgs,
+                inputArgs: [],
+                removed: false,
+                language: lang,
+            });
+            var codecNorm = normalize(orig.codec_name || "");
+            var typeKeyOrig = isCommentary(orig) ? "commentary" : (orig.disposition && orig.disposition.forced ? "forced" : "main");
+            if (codecNorm === "subrip" || codecNorm === "srt") {
+                srtSeen.set("".concat(lang, "|").concat(typeKeyOrig), true);
+            }
+        });
+        var byType = new Map();
+        streamsForLang.forEach(function (s) {
+            var typeKey = isCommentary(s) ? "commentary" : (s.disposition && s.disposition.forced ? "forced" : "main");
+            if (!byType.has(typeKey)) {
+                byType.set(typeKey, []);
+            }
+            byType.get(typeKey).push(s);
+        });
+        byType.forEach(function (typeStreams, typeKey) {
+            if (srtSeen.get("".concat(lang, "|").concat(typeKey))) {
+                args.jobLog("Skipping new SRT for lang=".concat(lang, " type=").concat(typeKey, " (SRT already exists)."));
+                return;
+            }
+            var textStream = typeStreams.find(function (s) { return preferredTextCodecs.includes(normalize(s.codec_name)); });
+            var target = textStream || typeStreams[0];
+            var codec = normalize(target.codec_name || "");
+            var outFile = path.join(outDir, "".concat(baseName, "_").concat(lang, "_").concat(typeKey, ".srt"));
+            if (preferredTextCodecs.includes(codec)) {
+                args.jobLog("Copying text subtitle to SRT for lang=".concat(lang, " type=").concat(typeKey));
+                var cmdArgs = [
+                    "-y",
+                    "-i",
+                    args.inputFileObj._id,
+                    "-map",
+                    "0:".concat(target.index),
+                    "-c:s",
+                    "srt",
+                    outFile,
+                ];
+                (0, child_process_1.execFileSync)(ffmpegBin, cmdArgs, { stdio: "inherit" });
+            }
+            else {
+                args.jobLog("OCR PGS to SRT for lang=".concat(lang, " type=").concat(typeKey, " (codec=").concat(codec, ")"));
+                var trackNumber = (target.index || 0) + 1;
+                var tLang = tessMap[lang] || "eng";
+                var env = Object.assign({}, process.env, { TESSDATA_PREFIX: path.join(path.dirname(pgsToSrtPath), "tessdata") });
+                var argsList = [
+                    pgsToSrtPath,
+                    "--input=".concat(args.inputFileObj._id),
+                    "--output=".concat(outFile),
+                    "--track=".concat(trackNumber),
+                    "--tesseractlanguage=".concat(tLang),
+                    "--tesseractversion=5",
+                ];
+                (0, child_process_1.execFileSync)(dotnetPath, argsList, { stdio: "inherit", env: env });
+            }
+            additionalInputs.push(outFile);
+            tempFiles.push(outFile);
+            var mapArgs = ["-map", "".concat(inputIdx, ":s:0?")];
+            var outputArgs = [
                 "-c:s",
                 "srt",
-                outFile,
+                "-metadata:s:s:{outputTypeIndex}",
+                "language=".concat(lang),
             ];
-            (0, child_process_1.execFileSync)(ffmpegBin, cmdArgs, { stdio: "inherit" });
-        }
-        else {
-            args.jobLog("OCR PGS to SRT for lang=".concat(lang, " (codec=").concat(codec, ")"));
-            var trackNumber = (target.index || 0) + 1;
-            var tLang = tessMap[lang] || "eng";
-            var env = Object.assign({}, process.env, { TESSDATA_PREFIX: path.join(path.dirname(pgsToSrtPath), "tessdata") });
-            var argsList = [
-                pgsToSrtPath,
-                "--input=".concat(args.inputFileObj._id),
-                "--output=".concat(outFile),
-                "--track=".concat(trackNumber),
-                "--tesseractlanguage=".concat(tLang),
-                "--tesseractversion=5",
-            ];
-            (0, child_process_1.execFileSync)(dotnetPath, argsList, { stdio: "inherit", env: env });
-        }
-        additionalInputs.push(outFile);
-        tempFiles.push(outFile);
-        var mapArgs = ["-map", "".concat(inputIdx, ":s:0?")];
-        var outputArgs = [
-            "-c:s",
-            "srt",
-            "-metadata:s:s:{outputTypeIndex}",
-            "language=".concat(lang),
-        ];
-        var title = (target.tags && target.tags.title) || "";
-        if (title) {
-            outputArgs.push("-metadata:s:s:{outputTypeIndex}");
-            outputArgs.push("title=".concat(title));
-        }
-        newSubtitleStreams.push({
-            index: inputIdx,
-            codec_type: "subtitle",
-            mapArgs: mapArgs,
-            outputArgs: outputArgs,
-            inputArgs: [],
-            removed: false,
-            language: lang,
+            var title = (target.tags && target.tags.title) || "";
+            if (title) {
+                outputArgs.push("-metadata:s:s:{outputTypeIndex}");
+                outputArgs.push("title=".concat(title));
+            }
+            newSubtitleStreams.push({
+                index: inputIdx,
+                codec_type: "subtitle",
+                mapArgs: mapArgs,
+                outputArgs: outputArgs,
+                inputArgs: [],
+                removed: false,
+                language: lang,
+            });
+            srtSeen.set("".concat(lang, "|").concat(typeKey), true);
+            inputIdx += 1;
         });
-        inputIdx += 1;
     });
-    if (newSubtitleStreams.length === 0) {
+    var combinedSubs = originalSubtitleStreams.concat(newSubtitleStreams);
+    if (combinedSubs.length === 0) {
         args.jobLog("No subtitles were extracted or OCR'd.");
         return {
             outputFileObj: args.inputFileObj,
@@ -197,7 +255,7 @@ var plugin = function (args) { return (function () {
     }
     var existingStreams = args.variables.ffmpegCommand.streams || [];
     var passthroughStreams = existingStreams.filter(function (s) { return s.codec_type !== "subtitle"; });
-    args.variables.ffmpegCommand.streams = passthroughStreams.concat(newSubtitleStreams);
+    args.variables.ffmpegCommand.streams = passthroughStreams.concat(combinedSubs);
     args.variables.ffmpegCommand.additionalInputs = additionalInputs;
     args.variables.ffmpegCommand.tempFiles = tempFiles;
     args.variables.ffmpegCommand.shouldProcess = true;

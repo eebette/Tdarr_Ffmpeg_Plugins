@@ -8,9 +8,7 @@ var codecTypeSelector = {
     data: "d",
     attachment: "t",
 };
-var normalize = function (value) {
-    return (value || "").toString().toLowerCase().trim();
-};
+var normalize = function (value) { return (value || "").toString().toLowerCase().trim(); };
 var normalizeList = function (value) {
     return normalize(value)
         .split(",")
@@ -47,59 +45,52 @@ var isCommentary = function (stream) {
         || "").toString();
     return commentaryRegex.test(title);
 };
-var bitrateToNumber = function (bitrate) {
-    if (!bitrate) {
-        return 0;
-    }
-    if (typeof bitrate === "number") {
-        return bitrate;
-    }
-    var cleaned = String(bitrate).trim().toLowerCase();
-    if (/^\d+\s*k$/.test(cleaned)) {
-        return parseInt(cleaned, 10) * 1000;
-    }
-    var numeric = cleaned.replace(/[^0-9]/g, "");
-    return numeric ? parseInt(numeric, 10) : 0;
-};
-var getStreamBitrate = function (stream) {
-    return bitrateToNumber(stream.bit_rate || (stream.tags && stream.tags.BPS));
-};
 var getMapArgs = function (stream) {
     var selector = codecTypeSelector[stream.codec_type] || stream.codec_type || "";
     var typeIndex = typeof stream.typeIndex === "number" ? stream.typeIndex : 0;
     return ["-map", "0:".concat(selector, ":").concat(typeIndex, "?")];
 };
-var updateDisposition = function (outputArgs, makeDefault) {
+var updateDisposition = function (outputArgs, makeDefault, makeForced) {
     var cleaned = [];
     for (var i = 0; i < outputArgs.length; i += 1) {
         var arg = outputArgs[i];
-        if (/^-disposition:a/.test(arg)) {
+        if (/^-disposition:s/.test(arg)) {
             i += 1;
             continue;
         }
         cleaned.push(arg);
     }
-    cleaned.push("-disposition:a:{outputTypeIndex}");
-    cleaned.push(makeDefault ? "default" : "0");
+    cleaned.push("-disposition:s:{outputTypeIndex}");
+    var flags = [];
+    if (makeDefault) {
+        flags.push("default");
+    }
+    if (makeForced) {
+        flags.push("forced");
+    }
+    if (flags.length === 0) {
+        flags.push("0");
+    }
+    cleaned.push(flags.join("+"));
     return cleaned;
 };
 var details = function () { return ({
-    name: "Reorder Audio Streams",
-    description: "Reorders audio streams by codec and language preference and sets a non-commentary stream as default.",
+    name: "Reorder Subtitles",
+    description: "Reorders subtitle streams by codec and/or language preference and sets the first non-commentary subtitle as default.",
     style: {
-        borderColor: "purple",
+        borderColor: "teal",
     },
-    tags: "audio",
+    tags: "subtitle",
     isStartPlugin: false,
     pType: "",
     requiresVersion: "2.11.01",
-    sidebarPosition: 2,
-    icon: "faSortAmountDown",
+    sidebarPosition: 7,
+    icon: "faClosedCaptioning",
     inputs: [
         {
             name: "Codec Order",
             type: "string",
-            defaultValue: "eac3,ac3,aac,truehd,dts,dtshd",
+            defaultValue: "srt,ass,ssa,subrip,pgs,hdmv_pgs_subtitle",
             inputUI: "text",
             tooltip: "Comma-separated codec preference (first = highest priority).",
         },
@@ -138,9 +129,9 @@ var plugin = function (args) {
     var precedence = getInputValue(args.inputs, "Precedence", "Codec Order");
     var codecOrder = normalizeList(codecOrderInput);
     var languageOrder = normalizeList(languageOrderInput);
-    var allStreams = getStreams(args.inputFileObj);
-    var audioMeta = allStreams.filter(function (s) { return s.codec_type === "audio"; });
-    var nativeLanguage = normalize((audioMeta[0] && audioMeta[0].tags && audioMeta[0].tags.language) || "");
+    var allMetaStreams = getStreams(args.inputFileObj);
+    var subtitleMeta = allMetaStreams.filter(function (s) { return s.codec_type === "subtitle"; });
+    var nativeLanguage = normalize((subtitleMeta[0] && subtitleMeta[0].tags && subtitleMeta[0].tags.language) || "");
     var resolveLanguage = function (lang) {
         if (lang === "original") {
             return nativeLanguage;
@@ -149,10 +140,10 @@ var plugin = function (args) {
     };
     var orderedLanguages = languageOrder.map(resolveLanguage);
     var streams = args.variables.ffmpegCommand.streams || [];
-    var audioStreams = streams.filter(function (s) { return s.codec_type === "audio"; });
-    var otherStreams = streams.filter(function (s) { return s.codec_type !== "audio"; });
-    if (audioStreams.length === 0) {
-        args.jobLog("No audio streams to reorder.");
+    var subtitleStreams = streams.filter(function (s) { return s.codec_type === "subtitle"; });
+    var otherStreams = streams.filter(function (s) { return s.codec_type !== "subtitle"; });
+    if (subtitleStreams.length === 0) {
+        args.jobLog("No subtitle streams to reorder.");
         return {
             outputFileObj: args.inputFileObj,
             outputNumber: 1,
@@ -160,7 +151,7 @@ var plugin = function (args) {
         };
     }
     var metaByIndex = new Map();
-    audioMeta.forEach(function (stream) {
+    subtitleMeta.forEach(function (stream) {
         metaByIndex.set(stream.index, stream);
     });
     var getCodecRank = function (codec) {
@@ -173,13 +164,12 @@ var plugin = function (args) {
         var idx = orderedLanguages.indexOf(resolved);
         return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
     };
-    var sortable = audioStreams.map(function (stream, idx) {
+    var sortable = subtitleStreams.map(function (stream, idx) {
         var meta = metaByIndex.get(stream.index) || {};
         var codec = normalize(meta.codec_name || stream.codec_name || "");
         var lang = normalize((meta.tags && meta.tags.language) || "");
         var commentary = isCommentary(meta);
-        var channels = meta.channels || 0;
-        var bitrate = getStreamBitrate(meta);
+        var forced = meta.disposition && meta.disposition.forced ? 1 : 0;
         return {
             stream: stream,
             codec: codec,
@@ -187,8 +177,7 @@ var plugin = function (args) {
             lang: lang,
             langRank: getLanguageRank(lang),
             commentary: commentary ? 1 : 0,
-            channels: channels,
-            bitrate: bitrate,
+            forced: forced,
             originalIndex: idx,
         };
     });
@@ -206,15 +195,12 @@ var plugin = function (args) {
         if (a.commentary !== b.commentary) {
             return a.commentary - b.commentary;
         }
-        if (a.channels !== b.channels) {
-            return b.channels - a.channels;
-        }
-        if (a.bitrate !== b.bitrate) {
-            return b.bitrate - a.bitrate;
+        if (a.forced !== b.forced) {
+            return b.forced - a.forced;
         }
         return a.originalIndex - b.originalIndex;
     });
-    var reorderedAudio = [];
+    var reordered = [];
     var firstDefaultIndex = sortable.findIndex(function (item) { return item.commentary === 0; });
     if (firstDefaultIndex === -1) {
         firstDefaultIndex = 0;
@@ -222,19 +208,20 @@ var plugin = function (args) {
     var changed = false;
     sortable.forEach(function (item, idx) {
         var makeDefault = idx === firstDefaultIndex;
+        var makeForced = item.forced === 1;
         var updatedOutputArgs = item.stream.outputArgs || [];
-        updatedOutputArgs = updateDisposition(updatedOutputArgs, makeDefault);
+        updatedOutputArgs = updateDisposition(updatedOutputArgs, makeDefault, makeForced);
         if (idx !== item.originalIndex) {
             changed = true;
         }
         if ((item.stream.outputArgs || []).join("|") !== updatedOutputArgs.join("|")) {
             changed = true;
         }
-        reorderedAudio.push(Object.assign({}, item.stream, {
+        reordered.push(Object.assign({}, item.stream, {
             outputArgs: updatedOutputArgs,
         }));
     });
-    var outputStreams = reorderedAudio.concat(otherStreams);
+    var outputStreams = reordered.concat(otherStreams);
     if (changed) {
         args.variables.ffmpegCommand.streams = outputStreams;
         args.variables.ffmpegCommand.shouldProcess = true;
