@@ -131,14 +131,10 @@ var hasDolbyVisionStream = function (metaStreams) {
 };
 var setMetadataArg = function (outputArgs, title, stream) {
     var cleaned = [];
-    var existingTitle = "";
     var existingHandler = "";
     for (var i = 0; i < outputArgs.length; i += 1) {
         var arg = outputArgs[i];
         if (/^-metadata:s:v/.test(arg)) {
-            if (i + 1 < outputArgs.length && outputArgs[i + 1].indexOf("title=") === 0) {
-                existingTitle = outputArgs[i + 1].split("=").slice(1).join("=");
-            }
             if (i + 1 < outputArgs.length && outputArgs[i + 1].indexOf("handler_name=") === 0) {
                 existingHandler = outputArgs[i + 1].split("=").slice(1).join("=");
             }
@@ -148,17 +144,13 @@ var setMetadataArg = function (outputArgs, title, stream) {
         cleaned.push(arg);
     }
     // Fall back to stream tags when outputArgs are empty.
-    var tagTitle = (stream.tags && stream.tags.title) || "";
     var tagHandler = (stream.tags && stream.tags.handler_name) || "";
-    var titleMatches = (existingTitle || tagTitle) === title;
     var handlerMatches = (existingHandler || tagHandler) === title;
-    if (titleMatches && handlerMatches) {
+    if (handlerMatches) {
         // Nothing to change.
         return outputArgs;
     }
-    // Always refresh both title and handler_name together so MP4 keeps the label.
-    cleaned.push("-metadata:s:v:{outputTypeIndex}");
-    cleaned.push("title=".concat(title));
+    // Refresh handler_name so MP4 keeps the label.
     cleaned.push("-metadata:s:v:{outputTypeIndex}");
     cleaned.push("handler_name=".concat(title));
     return cleaned;
