@@ -71,17 +71,12 @@ var detectHdrLabel = function (stream) {
     var codecName = normalize(stream.codec_name || "");
     var profile = (stream.profile || "").toString();
     var transfer = normalize(stream.color_transfer || "");
-    var isDv = codecName.startsWith("dvh")
-        || codecName.startsWith("dv")
-        || codecName.includes("dovi")
-        || /dolby\s*vision/i.test(profile);
     var hdrTransfer = transfer === "smpte2084";
     var hlg = transfer === "arib-std-b67" || /hlg/.test(transfer);
-    if (isDv) {
-        var profileMatch = profile.match(/(\d+(\.\d+)?)/);
-        var profileText = profileMatch ? "Profile ".concat(profileMatch[1]) : "Profile";
+    var dvInfo = getDolbyVisionInfo(stream, codecName, profile);
+    if (dvInfo.isDolbyVision) {
         var base = hdrTransfer ? "HDR10" : "HDR";
-        return "Dolby Vision ".concat(profileText, " (").concat(base, ")");
+        return "Dolby Vision Profile ".concat(dvInfo.profileText, " (").concat(base, ")");
     }
     if (hdrTransfer) {
         return "HDR10";
@@ -90,6 +85,34 @@ var detectHdrLabel = function (stream) {
         return "HDR";
     }
     return "SDR";
+};
+var getDolbyVisionInfo = function (stream, codecName, profile) {
+    var sideData = Array.isArray(stream.side_data_list) ? stream.side_data_list : [];
+    var tags = stream.tags || {};
+    var handler = normalize(tags.handler_name || "");
+    var dvConfig = sideData.find(function (entry) { return normalize(entry.side_data_type || "") === "dovi configuration record"; }) || {};
+    var configProfile = typeof dvConfig.dv_profile === "number" ? dvConfig.dv_profile : null;
+    var compatId = typeof dvConfig.dv_bl_signal_compatibility_id === "number" ? dvConfig.dv_bl_signal_compatibility_id : null;
+    var handlerMatch = handler.match(/dvp\s*=\s*([0-9]+(?:\.[0-9]+)?)/);
+    var handlerProfile = handlerMatch ? handlerMatch[1] : null;
+    var inferredProfile = configProfile !== null ? configProfile.toString()
+        : (handlerProfile || (profile.match(/(\d+(?:\.\d+)?)/) || [])[1]);
+    var isDv = codecName.startsWith("dvh")
+        || codecName.startsWith("dv")
+        || codecName.includes("dovi")
+        || /dolby\s*vision/i.test(profile)
+        || Boolean(inferredProfile);
+    if (!isDv) {
+        return { isDolbyVision: false, profileText: "" };
+    }
+    var profileText = inferredProfile || "Unknown";
+    if (inferredProfile && inferredProfile === "8" && compatId !== null) {
+        profileText = "8.".concat(compatId);
+    }
+    return {
+        isDolbyVision: true,
+        profileText: profileText,
+    };
 };
 var buildTitle = function (stream) {
     var resolution = formatResolution(stream);
@@ -110,6 +133,77 @@ var setMetadataArg = function (outputArgs, title) {
     cleaned.push("-metadata:s:v:{outputTypeIndex}");
     cleaned.push("title=".concat(title));
     return cleaned;
+};
+var getOutputStreamIndex = function (streams, stream) {
+    var filtered = streams.filter(function (s) { return !s.removed; });
+    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
+    return position === -1 ? 0 : position;
+};
+var getOutputStreamTypeIndex = function (streams, stream) {
+    var filtered = streams.filter(function (s) { return !s.removed && s.codec_type === stream.codec_type; });
+    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
+    return position === -1 ? 0 : position;
+};
+var getCodecSelectorForStream = function (streams, stream) {
+    var selector = stream.codec_type === "video" ? "v" : (stream.codec_type === "audio" ? "a" : (stream.codec_type === "subtitle" ? "s" : stream.codec_type || ""));
+    if (!selector || selector.length !== 1) {
+        return "-c:".concat(getOutputStreamIndex(streams, stream));
+    }
+    return "-c:".concat(selector, ":").concat(getOutputStreamTypeIndex(streams, stream));
+};
+var applyPlaceholders = function (args, streams, stream) {
+    return args.map(function (arg) {
+        var updated = arg;
+        if (updated.includes("{outputIndex}")) {
+            updated = updated.replace("{outputIndex}", String(getOutputStreamIndex(streams, stream)));
+        }
+        if (updated.includes("{outputTypeIndex}")) {
+            updated = updated.replace("{outputTypeIndex}", String(getOutputStreamTypeIndex(streams, stream)));
+        }
+        return updated;
+    });
+};
+var normalizeCodecSelectors = function (outputArgs, streams, stream) {
+    var codecSelector = getCodecSelectorForStream(streams, stream);
+    return outputArgs.map(function (arg) {
+        if (/^-c:[a-z]+$/.test(arg)) {
+            return codecSelector;
+        }
+        if (/^-c:\d+$/.test(arg)) {
+            return codecSelector;
+        }
+        if (/^-c:[a-z]+:\d+$/.test(arg)) {
+            return codecSelector;
+        }
+        return arg;
+    });
+};
+var normalizeMapArgs = function (mapArgs, streams, stream) {
+    var selector = stream.codec_type === "video" ? "v" : (stream.codec_type === "audio" ? "a" : (stream.codec_type === "subtitle" ? "s" : stream.codec_type || ""));
+    if (!selector) {
+        return mapArgs;
+    }
+    var mapTarget = "0:".concat(selector, ":").concat(getOutputStreamTypeIndex(streams, stream)).concat(selector === "v" ? "" : "?");
+    return mapArgs.map(function (arg, idx) {
+        var isMapValue = idx > 0 && mapArgs[idx - 1] === "-map";
+        if (isMapValue && /^\d+:\d+$/.test(arg)) {
+            return mapTarget;
+        }
+        return arg;
+    });
+};
+var buildOverallOutputArgs = function (streams) {
+    var activeStreams = (streams || []).filter(function (s) { return !s.removed; });
+    return activeStreams.reduce(function (acc, stream) {
+        var replacedArgs = applyPlaceholders(stream.outputArgs || [], activeStreams, stream);
+        var mapArgs = normalizeMapArgs(stream.mapArgs || [], activeStreams, stream);
+        var outputArgsForStream = replacedArgs.length === 0
+            ? [getCodecSelectorForStream(activeStreams, stream), "copy"]
+            : normalizeCodecSelectors(replacedArgs, activeStreams, stream);
+        acc.push.apply(acc, mapArgs);
+        acc.push.apply(acc, outputArgsForStream);
+        return acc;
+    }, []);
 };
 var plugin = function (args) {
     var lib = require("../../../../../methods/lib")();
@@ -151,8 +245,11 @@ var plugin = function (args) {
             outputArgs: updatedArgs,
         });
     });
+    var overallOutputArgs = buildOverallOutputArgs(newStreams);
+    args.variables.ffmpegCommand.streams = newStreams;
+    args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
+    args.variables.ffmpegCommand.overallOuputArguments = overallOutputArgs;
     if (changed) {
-        args.variables.ffmpegCommand.streams = newStreams;
         args.variables.ffmpegCommand.shouldProcess = true;
         args.variables.ffmpegCommand.init = true;
     }

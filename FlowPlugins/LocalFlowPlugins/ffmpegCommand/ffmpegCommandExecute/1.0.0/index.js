@@ -136,6 +136,31 @@ var normalizeMapArgs = function (mapArgs, streams, stream) {
         return arg;
     });
 };
+var applyPlaceholders = function (args, streams, stream) {
+    return args.map(function (arg) {
+        var updated = arg;
+        if (updated.includes('{outputIndex}')) {
+            updated = updated.replace('{outputIndex}', String(getOuputStreamIndex(streams, stream)));
+        }
+        if (updated.includes('{outputTypeIndex}')) {
+            updated = updated.replace('{outputTypeIndex}', String(getOuputStreamTypeIndex(streams, stream)));
+        }
+        return updated;
+    });
+};
+var buildOutputArgsFromStreams = function (streams) {
+    var activeStreams = (streams || []).filter(function (s) { return !s.removed; });
+    return activeStreams.reduce(function (acc, stream) {
+        var replacedArgs = applyPlaceholders(stream.outputArgs || [], activeStreams, stream);
+        var mapArgs = normalizeMapArgs(stream.mapArgs || [], activeStreams, stream);
+        var outputArgsForStream = replacedArgs.length === 0
+            ? [getCodecSelectorForStream(activeStreams, stream), 'copy']
+            : normalizeCodecSelectors(replacedArgs, activeStreams, stream);
+        acc.push.apply(acc, mapArgs);
+        acc.push.apply(acc, outputArgsForStream);
+        return acc;
+    }, []);
+};
 var moveFilterArgsBeforeMaps = function (args) {
     var filterArgs = [];
     var argsWithoutFilters = [];
@@ -197,7 +222,7 @@ var moveMetadataArgsBeforeMaps = function (args) {
 };
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, cliArgs, _a, shouldProcess, streams, inputArgs, additionalInputs, _loop_1, i, idx, outputFilePath, spawnArgs, cli, res, tempFiles;
+    var lib, cliArgs, _a, shouldProcess, streams, inputArgs, additionalInputs, idx, outputArgs, outputFilePath, spawnArgs, cli, res, tempFiles;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
@@ -216,6 +241,8 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     cliArgs.push(input);
                 });
                 _a = args.variables.ffmpegCommand, shouldProcess = _a.shouldProcess, streams = _a.streams;
+                streams = streams || [];
+                args.variables.ffmpegCommand.overallInputArguments = args.variables.ffmpegCommand.overallInputArguments || [];
                 if (args.variables.ffmpegCommand.overallInputArguments.length > 0) {
                     shouldProcess = true;
                 }
@@ -230,35 +257,26 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     args.jobLog('No streams mapped for new file');
                     throw new Error('No streams mapped for new file');
                 }
-                _loop_1 = function (i) {
-                    var stream = streams[i];
-                    stream.outputArgs = stream.outputArgs.map(function (arg) {
-                        if (arg.includes('{outputIndex}')) {
-                            // eslint-disable-next-line no-param-reassign
-                            arg = arg.replace('{outputIndex}', String(getOuputStreamIndex(streams, stream)));
-                        }
-                        if (arg.includes('{outputTypeIndex}')) {
-                            // eslint-disable-next-line no-param-reassign
-                            arg = arg.replace('{outputTypeIndex}', String(getOuputStreamTypeIndex(streams, stream)));
-                        }
-                        return arg;
-                    });
-                    var mapArgs = normalizeMapArgs(stream.mapArgs, streams, stream);
-                    cliArgs.push.apply(cliArgs, mapArgs);
-                    var outputArgsForStream = stream.outputArgs.length === 0
-                        ? [getCodecSelectorForStream(streams, stream), 'copy']
-                        : normalizeCodecSelectors(stream.outputArgs, streams, stream);
-                    cliArgs.push.apply(cliArgs, outputArgsForStream);
-                    inputArgs.push.apply(inputArgs, stream.inputArgs);
-                };
-                for (i = 0; i < streams.length; i += 1) {
-                    _loop_1(i);
-                }
+                streams.forEach(function (stream) {
+                    inputArgs.push.apply(inputArgs, stream.inputArgs || []);
+                });
                 idx = cliArgs.indexOf('-i');
                 cliArgs.splice.apply(cliArgs, __spreadArray([idx, 0], inputArgs, false));
-                if (args.variables.ffmpegCommand.overallOuputArguments.length > 0) {
-                    cliArgs.push.apply(cliArgs, args.variables.ffmpegCommand.overallOuputArguments);
-                    shouldProcess = true;
+                args.variables.ffmpegCommand.overallOutputArguments = args.variables.ffmpegCommand.overallOutputArguments || [];
+                args.variables.ffmpegCommand.overallOuputArguments = args.variables.ffmpegCommand.overallOuputArguments || [];
+                outputArgs = args.variables.ffmpegCommand.overallOutputArguments && args.variables.ffmpegCommand.overallOutputArguments.length > 0
+                    ? __spreadArray([], args.variables.ffmpegCommand.overallOutputArguments, true)
+                    : (args.variables.ffmpegCommand.overallOuputArguments && args.variables.ffmpegCommand.overallOuputArguments.length > 0
+                        ? __spreadArray([], args.variables.ffmpegCommand.overallOuputArguments, true)
+                        : buildOutputArgsFromStreams(streams));
+                if (outputArgs.length > 0) {
+                    cliArgs.push.apply(cliArgs, outputArgs);
+                    if (args.variables.ffmpegCommand.overallOutputArguments && args.variables.ffmpegCommand.overallOutputArguments.length > 0) {
+                        shouldProcess = true;
+                    }
+                    if (args.variables.ffmpegCommand.overallOuputArguments && args.variables.ffmpegCommand.overallOuputArguments.length > 0) {
+                        shouldProcess = true;
+                    }
                 }
                 cliArgs = moveFilterArgsBeforeMaps(cliArgs);
                 cliArgs = moveMetadataArgsBeforeMaps(cliArgs);

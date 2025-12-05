@@ -92,6 +92,77 @@ var updateDisposition = function (outputArgs, makeDefault) {
     cleaned.push(makeDefault ? "default" : "0");
     return cleaned;
 };
+var getOutputStreamIndex = function (streams, stream) {
+    var filtered = streams.filter(function (s) { return !s.removed; });
+    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
+    return position === -1 ? 0 : position;
+};
+var getOutputStreamTypeIndex = function (streams, stream) {
+    var filtered = streams.filter(function (s) { return !s.removed && s.codec_type === stream.codec_type; });
+    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
+    return position === -1 ? 0 : position;
+};
+var getCodecSelectorForStream = function (streams, stream) {
+    var selector = codecTypeSelector[stream.codec_type];
+    if (!selector) {
+        return "-c:".concat(getOutputStreamIndex(streams, stream));
+    }
+    return "-c:".concat(selector, ":").concat(getOutputStreamTypeIndex(streams, stream));
+};
+var applyPlaceholders = function (args, streams, stream) {
+    return args.map(function (arg) {
+        var updated = arg;
+        if (updated.includes("{outputIndex}")) {
+            updated = updated.replace("{outputIndex}", String(getOutputStreamIndex(streams, stream)));
+        }
+        if (updated.includes("{outputTypeIndex}")) {
+            updated = updated.replace("{outputTypeIndex}", String(getOutputStreamTypeIndex(streams, stream)));
+        }
+        return updated;
+    });
+};
+var normalizeCodecSelectors = function (outputArgs, streams, stream) {
+    var codecSelector = getCodecSelectorForStream(streams, stream);
+    return outputArgs.map(function (arg) {
+        if (/^-c:[a-z]+$/.test(arg)) {
+            return codecSelector;
+        }
+        if (/^-c:\d+$/.test(arg)) {
+            return codecSelector;
+        }
+        if (/^-c:[a-z]+:\d+$/.test(arg)) {
+            return codecSelector;
+        }
+        return arg;
+    });
+};
+var normalizeMapArgs = function (mapArgs, streams, stream) {
+    var selector = codecTypeSelector[stream.codec_type] || stream.codec_type || "";
+    if (!selector) {
+        return mapArgs;
+    }
+    var mapTarget = "0:".concat(selector, ":").concat(getOutputStreamTypeIndex(streams, stream)).concat(selector === "v" ? "" : "?");
+    return mapArgs.map(function (arg, idx) {
+        var isMapValue = idx > 0 && mapArgs[idx - 1] === "-map";
+        if (isMapValue && /^\d+:\d+$/.test(arg)) {
+            return mapTarget;
+        }
+        return arg;
+    });
+};
+var buildOverallOutputArgs = function (streams) {
+    var activeStreams = (streams || []).filter(function (s) { return !s.removed; });
+    return activeStreams.reduce(function (acc, stream) {
+        var replacedArgs = applyPlaceholders(stream.outputArgs || [], activeStreams, stream);
+        var mapArgs = normalizeMapArgs(stream.mapArgs || [], activeStreams, stream);
+        var outputArgsForStream = replacedArgs.length === 0
+            ? [getCodecSelectorForStream(activeStreams, stream), "copy"]
+            : normalizeCodecSelectors(replacedArgs, activeStreams, stream);
+        acc.push.apply(acc, mapArgs);
+        acc.push.apply(acc, outputArgsForStream);
+        return acc;
+    }, []);
+};
 var details = function () { return ({
     name: "Reorder Audio Streams",
     description: "Reorders audio streams by codec and language preference and sets a non-commentary stream as default.",
@@ -245,8 +316,11 @@ var plugin = function (args) {
         }));
     });
     var outputStreams = reorderedAudio.concat(otherStreams);
+    var overallOutputArgs = buildOverallOutputArgs(outputStreams);
+    args.variables.ffmpegCommand.streams = outputStreams;
+    args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
+    args.variables.ffmpegCommand.overallOuputArguments = overallOutputArgs;
     if (changed) {
-        args.variables.ffmpegCommand.streams = outputStreams;
         args.variables.ffmpegCommand.shouldProcess = true;
         args.variables.ffmpegCommand.init = true;
     }
