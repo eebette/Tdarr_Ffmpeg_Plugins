@@ -192,7 +192,7 @@ var plugin = function (args) {
         if (!lang && nativeLanguage) {
             lang = nativeLanguage;
         }
-        var keep = allowedLanguages.size === 0 ? true : allowedLanguages.has(lang);
+        var keep = allowedLanguages.size === 0 ? true : (lang ? allowedLanguages.has(lang) : true);
         if (!keep) {
             changed = true;
             return Object.assign({}, stream, { removed: true });

@@ -129,7 +129,7 @@ var hasDolbyVisionStream = function (metaStreams) {
         return detectHdrLabel(stream).toLowerCase().indexOf("dolby vision") !== -1;
     });
 };
-var setMetadataArg = function (outputArgs, title) {
+var setMetadataArg = function (outputArgs, title, stream) {
     var cleaned = [];
     var existingTitle = "";
     var existingHandler = "";
@@ -146,6 +146,15 @@ var setMetadataArg = function (outputArgs, title) {
             continue;
         }
         cleaned.push(arg);
+    }
+    // Fall back to stream tags when outputArgs are empty.
+    var tagTitle = (stream.tags && stream.tags.title) || "";
+    var tagHandler = (stream.tags && stream.tags.handler_name) || "";
+    var titleMatches = (existingTitle || tagTitle) === title;
+    var handlerMatches = (existingHandler || tagHandler) === title;
+    if (titleMatches && handlerMatches) {
+        // Nothing to change.
+        return outputArgs;
     }
     // Always refresh both title and handler_name together so MP4 keeps the label.
     cleaned.push("-metadata:s:v:{outputTypeIndex}");
@@ -259,7 +268,7 @@ var plugin = function (args) {
         }
         var metaStream = metaByIndex.get(stream.index) || meta[0];
         var title = buildTitle(metaStream);
-        var updatedArgs = setMetadataArg(stream.outputArgs || [], title);
+        var updatedArgs = setMetadataArg(stream.outputArgs || [], title, stream);
         if ((stream.outputArgs || []).join("|") !== updatedArgs.join("|")) {
             changed = true;
         }
