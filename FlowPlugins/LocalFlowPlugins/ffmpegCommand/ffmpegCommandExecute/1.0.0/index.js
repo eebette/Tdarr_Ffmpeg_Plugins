@@ -261,6 +261,12 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 }
                 streams.forEach(function (stream) {
                     inputArgs.push.apply(inputArgs, stream.inputArgs || []);
+                    if ((stream.inputArgs || []).length > 0) {
+                        shouldProcess = true;
+                    }
+                    if ((stream.outputArgs || []).length > 0) {
+                        shouldProcess = true;
+                    }
                 });
                 idx = cliArgs.indexOf('-i');
                 cliArgs.splice.apply(cliArgs, __spreadArray([idx, 0], inputArgs, false));
@@ -282,6 +288,20 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 }
                 cliArgs = moveFilterArgsBeforeMaps(cliArgs);
                 cliArgs = moveMetadataArgsBeforeMaps(cliArgs);
+                // If no plugin requested processing and no meaningful change was requested, skip execution.
+                var inputExt = (args.inputFileObj.container
+                    || ((args.inputFileObj._id || "").split(".").pop())
+                    || "mkv").toLowerCase();
+                var requestedContainer = (args.variables.ffmpegCommand.container || inputExt).toLowerCase();
+                var containerChange = requestedContainer !== inputExt;
+                if (!shouldProcess && !containerChange && additionalInputs.length === 0 && args.variables.ffmpegCommand.overallInputArguments.length === 0 && args.variables.ffmpegCommand.overallOutputArguments.length === 0 && args.variables.ffmpegCommand.overallOuputArguments.length === 0) {
+                    args.jobLog('No need to process file, already as required');
+                    return [2 /*return*/, {
+                            outputFileObj: args.inputFileObj,
+                            outputNumber: 1,
+                            variables: args.variables,
+                        }];
+                }
                 if (!shouldProcess) {
                     args.jobLog('No need to process file, already as required');
                     return [2 /*return*/, {
