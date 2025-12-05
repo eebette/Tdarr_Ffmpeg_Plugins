@@ -168,10 +168,17 @@ var plugin = function (args) {
     var metaStreams = getStreams(args.inputFileObj);
     var audioMeta = metaStreams.filter(function (s) { return s.codec_type === "audio"; });
     var nativeLanguage = normalize((audioMeta[0] && audioMeta[0].tags && audioMeta[0].tags.language) || "");
-    var allowedLanguages = new Set(languages);
-    if (allowedLanguages.has("original") && nativeLanguage) {
-        allowedLanguages.add(nativeLanguage);
-    }
+    var allowedLanguages = new Set();
+    languages.forEach(function (lang) {
+        if (lang === "original") {
+            if (nativeLanguage) {
+                allowedLanguages.add(nativeLanguage);
+            }
+        }
+        else {
+            allowedLanguages.add(lang);
+        }
+    });
     var changed = false;
     var filteredStreams = streams.map(function (stream) {
         if (stream.codec_type !== "audio") {
@@ -182,7 +189,10 @@ var plugin = function (args) {
             || (meta.tags && meta.tags.language)
             || extractLanguageFromOutputArgs(stream.outputArgs || [])
             || "");
-        var keep = allowedLanguages.size === 0 ? true : allowedLanguages.has(lang) || (allowedLanguages.has("original") && lang === nativeLanguage);
+        if (!lang && nativeLanguage) {
+            lang = nativeLanguage;
+        }
+        var keep = allowedLanguages.size === 0 ? true : allowedLanguages.has(lang);
         if (!keep) {
             changed = true;
             return Object.assign({}, stream, { removed: true });
