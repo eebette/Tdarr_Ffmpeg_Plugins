@@ -83,6 +83,19 @@ var updateDisposition = function (outputArgs, makeDefault, makeForced) {
     cleaned.push(flags.join("+"));
     return cleaned;
 };
+var parseDisposition = function (outputArgs) {
+    for (var i = 0; i < outputArgs.length - 1; i += 1) {
+        if (/^-disposition:s/.test(outputArgs[i])) {
+            var value = outputArgs[i + 1] || "";
+            return {
+                default: /default/.test(value),
+                forced: /forced/.test(value),
+                raw: value,
+            };
+        }
+    }
+    return { default: null, forced: null, raw: null };
+};
 var details = function () { return ({
     name: "Reorder Subtitles",
     description: "Reorders subtitle streams by codec and/or language preference and sets the first non-commentary subtitle as default.",
@@ -220,7 +233,12 @@ var plugin = function (args) {
         var makeDefault = idx === firstDefaultIndex;
         var makeForced = item.forced === 1;
         var updatedOutputArgs = item.stream.outputArgs || [];
-        updatedOutputArgs = updateDisposition(updatedOutputArgs, makeDefault, makeForced);
+        var parsed = parseDisposition(updatedOutputArgs);
+        var existingDefault = parsed.default !== null ? parsed.default : (item.stream.disposition && item.stream.disposition.default === 1);
+        var existingForced = parsed.forced !== null ? parsed.forced : (item.stream.disposition && item.stream.disposition.forced === 1);
+        if (existingDefault !== makeDefault || existingForced !== makeForced) {
+            updatedOutputArgs = updateDisposition(updatedOutputArgs, makeDefault, makeForced);
+        }
         if (idx !== item.originalIndex) {
             changed = true;
         }

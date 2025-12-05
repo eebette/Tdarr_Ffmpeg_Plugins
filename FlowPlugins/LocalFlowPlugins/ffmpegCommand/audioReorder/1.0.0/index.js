@@ -78,6 +78,18 @@ var getMapArgs = function (stream) {
     var typeIndex = typeof stream.typeIndex === "number" ? stream.typeIndex : 0;
     return ["-map", "0:".concat(selector, ":").concat(typeIndex, "?")];
 };
+var parseDisposition = function (outputArgs) {
+    for (var i = 0; i < outputArgs.length - 1; i += 1) {
+        if (/^-disposition:a/.test(outputArgs[i])) {
+            var value = outputArgs[i + 1] || "";
+            return {
+                default: /default/.test(value),
+                raw: value,
+            };
+        }
+    }
+    return { default: null, raw: null };
+};
 var updateDisposition = function (outputArgs, makeDefault) {
     var cleaned = [];
     for (var i = 0; i < outputArgs.length; i += 1) {
@@ -306,7 +318,11 @@ var plugin = function (args) {
     sortable.forEach(function (item, idx) {
         var makeDefault = idx === firstDefaultIndex;
         var updatedOutputArgs = item.stream.outputArgs || [];
-        updatedOutputArgs = updateDisposition(updatedOutputArgs, makeDefault);
+        var parsed = parseDisposition(updatedOutputArgs);
+        var existingDefault = parsed.default !== null ? parsed.default : (item.stream.disposition && item.stream.disposition.default === 1);
+        if (existingDefault !== makeDefault) {
+            updatedOutputArgs = updateDisposition(updatedOutputArgs, makeDefault);
+        }
         if (idx !== item.originalIndex) {
             changed = true;
         }
