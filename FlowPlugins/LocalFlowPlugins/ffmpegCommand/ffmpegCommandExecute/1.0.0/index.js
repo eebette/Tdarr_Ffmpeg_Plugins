@@ -264,17 +264,17 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 cliArgs.splice.apply(cliArgs, __spreadArray([idx, 0], inputArgs, false));
                 args.variables.ffmpegCommand.overallOutputArguments = args.variables.ffmpegCommand.overallOutputArguments || [];
                 args.variables.ffmpegCommand.overallOuputArguments = args.variables.ffmpegCommand.overallOuputArguments || [];
-                outputArgs = args.variables.ffmpegCommand.overallOutputArguments && args.variables.ffmpegCommand.overallOutputArguments.length > 0
+                var configuredOutputArgs = args.variables.ffmpegCommand.overallOutputArguments.length > 0
                     ? __spreadArray([], args.variables.ffmpegCommand.overallOutputArguments, true)
-                    : (args.variables.ffmpegCommand.overallOuputArguments && args.variables.ffmpegCommand.overallOuputArguments.length > 0
-                        ? __spreadArray([], args.variables.ffmpegCommand.overallOuputArguments, true)
-                        : buildOutputArgsFromStreams(streams));
+                    : __spreadArray([], args.variables.ffmpegCommand.overallOuputArguments, true);
+                var configuredHasMaps = configuredOutputArgs.some(function (arg) { return arg === '-map'; });
+                var streamOutputArgs = buildOutputArgsFromStreams(streams);
+                outputArgs = configuredHasMaps && configuredOutputArgs.length > 0
+                    ? configuredOutputArgs
+                    : __spreadArray(__spreadArray([], streamOutputArgs, true), configuredOutputArgs, true);
                 if (outputArgs.length > 0) {
                     cliArgs.push.apply(cliArgs, outputArgs);
-                    if (args.variables.ffmpegCommand.overallOutputArguments && args.variables.ffmpegCommand.overallOutputArguments.length > 0) {
-                        shouldProcess = true;
-                    }
-                    if (args.variables.ffmpegCommand.overallOuputArguments && args.variables.ffmpegCommand.overallOuputArguments.length > 0) {
+                    if (configuredOutputArgs.length > 0) {
                         shouldProcess = true;
                     }
                 }
