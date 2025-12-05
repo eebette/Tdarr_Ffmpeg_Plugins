@@ -124,11 +124,6 @@ var buildTitle = function (stream) {
     var hdr = detectHdrLabel(stream);
     return "".concat(resolution, " ").concat(codec, " ").concat(hdr);
 };
-var hasDolbyVisionStream = function (metaStreams) {
-    return (metaStreams || []).some(function (stream) {
-        return detectHdrLabel(stream).toLowerCase().indexOf("dolby vision") !== -1;
-    });
-};
 var setMetadataArg = function (outputArgs, title, stream) {
     var cleaned = [];
     var existingHandler = "";
@@ -268,30 +263,16 @@ var plugin = function (args) {
             outputArgs: updatedArgs,
         });
     });
-    var overallOutputArgs = buildOverallOutputArgs(newStreams);
-    var needsStrict = false;
-    if (hasDolbyVisionStream(meta)) {
-        var presetStrict = (args.variables.ffmpegCommand.overallOutputArguments || args.variables.ffmpegCommand.overallOuputArguments || []).some(function (arg) { return arg === "-strict"; });
-        var hasStrict = presetStrict || overallOutputArgs.some(function (arg) { return arg === "-strict"; });
-        if (!hasStrict) {
-            needsStrict = true;
-            // place -strict after any video codec args to ensure DV RPU is preserved
-            var insertAt = overallOutputArgs.findIndex(function (arg) { return /^-c:v/.test(arg); });
-            if (insertAt === -1) {
-                insertAt = overallOutputArgs.length;
-            }
-            overallOutputArgs.splice(insertAt + 2, 0, "-strict", "unofficial");
-        }
-    }
-    if (!changed && !needsStrict) {
-        args.jobLog("Video titles already standardized; no remapping needed.");
-        console.log("videoCodecStandardize: no-change (titles already standardized)");
+    if (!changed) {
+        args.jobLog("Video handlers already standardized; no remapping needed.");
+        console.log("videoCodecStandardize: no-change (handler_name already standardized)");
         return {
             outputFileObj: args.inputFileObj,
             outputNumber: 1,
             variables: args.variables,
         };
     }
+    var overallOutputArgs = buildOverallOutputArgs(newStreams);
     console.log("videoCodecStandardize: setting streams/args", {
         streams: newStreams,
         overallOutputArgs: overallOutputArgs,

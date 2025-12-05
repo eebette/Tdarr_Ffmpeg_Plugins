@@ -222,6 +222,42 @@ var moveMetadataArgsBeforeMaps = function (args) {
     argsWithoutMetadata.splice.apply(argsWithoutMetadata, __spreadArray([insertIndex, 0], metadataArgs, false));
     return argsWithoutMetadata;
 };
+var hasDolbyVisionStream = function (fileObj) {
+    var ffprobe = (fileObj && (fileObj.ffprobeData
+        || fileObj.ffProbeData
+        || (fileObj.meta && fileObj.meta.ffProbeData))) || { streams: [] };
+    return (ffprobe.streams || []).some(function (s) {
+        if (!s || s.codec_type !== 'video') {
+            return false;
+        }
+        var name = (s.codec_name || '').toString().toLowerCase();
+        var tags = s.tags || {};
+        var handler = (tags.handler_name || '').toString().toLowerCase();
+        var sideData = Array.isArray(s.side_data_list) ? s.side_data_list : [];
+        var sideHasDv = sideData.some(function (entry) {
+            var t = (entry.side_data_type || '').toString().toLowerCase();
+            return t.includes('dovi');
+        });
+        return name.startsWith('dv')
+            || handler.includes('dolby vision')
+            || handler.includes('dovi')
+            || sideHasDv;
+    });
+};
+var insertStrictAfterVideoCodec = function (args) {
+    if (args.includes('-strict')) {
+        return args;
+    }
+    var insertAt = args.findIndex(function (arg) { return /^-c:(?:v|video)/.test(arg); });
+    var outputArgs = __spreadArray([], args, true);
+    if (insertAt !== -1) {
+        var spliceAt = Math.min(outputArgs.length, insertAt + 2);
+        outputArgs.splice(spliceAt, 0, '-strict', 'unofficial');
+        return outputArgs;
+    }
+    outputArgs.push('-strict', 'unofficial');
+    return outputArgs;
+};
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
     var lib, cliArgs, _a, shouldProcess, streams, inputArgs, additionalInputs, idx, outputArgs, outputFilePath, spawnArgs, cli, res, tempFiles;
@@ -280,6 +316,9 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 outputArgs = configuredHasMaps && configuredOutputArgs.length > 0
                     ? configuredOutputArgs
                     : __spreadArray(__spreadArray([], streamOutputArgs, true), configuredOutputArgs, true);
+                if (shouldProcess && hasDolbyVisionStream(args.inputFileObj)) {
+                    outputArgs = insertStrictAfterVideoCodec(outputArgs);
+                }
                 if (outputArgs.length > 0) {
                     cliArgs.push.apply(cliArgs, outputArgs);
                     if (configuredOutputArgs.length > 0) {
