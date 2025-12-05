@@ -320,6 +320,7 @@ var plugin = function (args) {
     var shouldProcess = conversions.length > 0;
     if (!shouldProcess) {
         args.jobLog("Audio already has suitable fallback; no changes needed.");
+        console.log("audioEAC3Fallback: no-change (existing fallback present)");
         args.variables.ffmpegCommand.shouldProcess = false;
         return {
             outputFileObj: args.inputFileObj,
@@ -379,6 +380,10 @@ var plugin = function (args) {
         || extension
         || "mkv";
     var overallOutputArgs = buildOverallOutputArgs(outputStreams);
+    console.log("audioEAC3Fallback: setting streams/args", {
+        streams: outputStreams,
+        overallOutputArgs: overallOutputArgs,
+    });
     args.variables.ffmpegCommand.streams = outputStreams;
     args.variables.ffmpegCommand.overallInputArguments = [];
     args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;

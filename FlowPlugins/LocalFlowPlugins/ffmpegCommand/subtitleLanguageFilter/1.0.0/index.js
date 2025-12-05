@@ -116,9 +116,14 @@ var plugin = function (args) {
         return stream;
     });
     if (changed) {
-        args.variables.ffmpegCommand.streams = filteredStreams.filter(function (s) { return !s.removed; });
+        var kept = filteredStreams.filter(function (s) { return !s.removed; });
+        console.log("subtitleLanguageFilter: setting filtered streams", { streams: kept });
+        args.variables.ffmpegCommand.streams = kept;
         args.variables.ffmpegCommand.shouldProcess = true;
         args.variables.ffmpegCommand.init = true;
+    }
+    else {
+        console.log("subtitleLanguageFilter: no-change (no streams dropped)");
     }
     return {
         outputFileObj: args.inputFileObj,

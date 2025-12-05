@@ -140,6 +140,7 @@ var plugin = function (args) { return (function () {
     var subtitleStreams = allStreams.filter(function (s) { return s.codec_type === "subtitle"; });
     if (subtitleStreams.length === 0) {
         args.jobLog("No subtitle streams found; skipping.");
+        console.log("subtitleExtractToSrt: no-change (no subtitle streams)");
         return {
             outputFileObj: args.inputFileObj,
             outputNumber: 1,
@@ -199,6 +200,7 @@ var plugin = function (args) { return (function () {
         byType.forEach(function (typeStreams, typeKey) {
             if (srtSeen.get("".concat(lang, "|").concat(typeKey))) {
                 args.jobLog("Skipping new SRT for lang=".concat(lang, " type=").concat(typeKey, " (SRT already exists)."));
+                console.log("subtitleExtractToSrt: skipping duplicate SRT creation", { lang: lang, type: typeKey });
                 return;
             }
             var textStream = typeStreams.find(function (s) { return preferredTextCodecs.includes(normalize(s.codec_name)); });
@@ -263,6 +265,7 @@ var plugin = function (args) { return (function () {
     });
     if (newSubtitleStreams.length === 0) {
         args.jobLog("No subtitle streams converted to SRT; skipping extraction/OCR.");
+        console.log("subtitleExtractToSrt: no-change (no new SRTs created)");
         return {
             outputFileObj: args.inputFileObj,
             outputNumber: 1,
@@ -288,6 +291,10 @@ var plugin = function (args) { return (function () {
     args.variables.ffmpegCommand.tempFiles = tempFiles;
     args.variables.ffmpegCommand.shouldProcess = true;
     args.variables.ffmpegCommand.init = true;
+    console.log("subtitleExtractToSrt: setting streams/inputs", {
+        streams: args.variables.ffmpegCommand.streams,
+        additionalInputs: args.variables.ffmpegCommand.additionalInputs,
+    });
     return {
         outputFileObj: args.inputFileObj,
         outputNumber: 1,

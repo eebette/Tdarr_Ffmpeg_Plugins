@@ -202,11 +202,18 @@ var plugin = function (args) {
     if (changed) {
         var keptStreams = filteredStreams.filter(function (s) { return !s.removed; });
         var overallOutputArgs = buildOverallOutputArgs(keptStreams);
+        console.log("audioLanguageFilter: setting filtered streams/args", {
+            streams: keptStreams,
+            overallOutputArgs: overallOutputArgs,
+        });
         args.variables.ffmpegCommand.streams = keptStreams;
         args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
         args.variables.ffmpegCommand.overallOuputArguments = overallOutputArgs;
         args.variables.ffmpegCommand.shouldProcess = true;
         args.variables.ffmpegCommand.init = true;
+    }
+    else {
+        console.log("audioLanguageFilter: no-change (no streams dropped)");
     }
     return {
         outputFileObj: args.inputFileObj,

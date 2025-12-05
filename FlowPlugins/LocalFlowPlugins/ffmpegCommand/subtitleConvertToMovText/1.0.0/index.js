@@ -181,6 +181,7 @@ var plugin = function (args) {
         || ((args.inputFileObj._id || "").split(".").pop());
     if (!isMp4Container(targetContainer || "")) {
         args.jobLog("Target container is not MP4/M4V; subtitle conversion not required.");
+        console.log("subtitleConvertToMovText: no-change (container not mp4/m4v)");
         return {
             outputFileObj: args.inputFileObj,
             outputNumber: 1,
@@ -190,6 +191,7 @@ var plugin = function (args) {
     var mappedStreams = args.variables.ffmpegCommand.streams || [];
     if (mappedStreams.length === 0) {
         args.jobLog("No mapped streams to convert.");
+        console.log("subtitleConvertToMovText: no-change (no mapped streams)");
         return {
             outputFileObj: args.inputFileObj,
             outputNumber: 1,
@@ -212,6 +214,7 @@ var plugin = function (args) {
         var meta = metaByIndex.get(stream.index) || {};
         var codec = normalize(stream.codec_name || meta.codec_name || "");
         if (mp4CompatibleCodecs.indexOf(codec) !== -1) {
+            // already mp4-compatible
             return stream;
         }
         if (textConvertibleCodecs.indexOf(codec) !== -1 || codec.length === 0) {
@@ -264,6 +267,10 @@ var plugin = function (args) {
     if (changed) {
         var keptStreams = updatedStreams.filter(function (s) { return !s.removed; });
         var overallOutputArgs = buildOverallOutputArgs(keptStreams);
+        console.log("subtitleConvertToMovText: setting converted streams/args", {
+            streams: keptStreams,
+            overallOutputArgs: overallOutputArgs,
+        });
         args.variables.ffmpegCommand.streams = keptStreams;
         args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
         args.variables.ffmpegCommand.overallOuputArguments = overallOutputArgs;
@@ -278,6 +285,9 @@ var plugin = function (args) {
         if (duplicateRemovals > 0) {
             args.jobLog("Removed ".concat(duplicateRemovals, " duplicate subtitle stream(s)."));
         }
+    }
+    else {
+        console.log("subtitleConvertToMovText: no-change (all subtitles already mp4-compatible mov_text)");
     }
     return {
         outputFileObj: args.inputFileObj,

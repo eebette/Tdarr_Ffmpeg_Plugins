@@ -320,6 +320,7 @@ var plugin = function (args) {
     var outputStreams = reorderedAudio.concat(otherStreams);
     if (!changed) {
         args.jobLog("Audio order already matches desired priority; no remapping needed.");
+        console.log("audioReorder: no-change (order already correct)");
         return {
             outputFileObj: args.inputFileObj,
             outputNumber: 1,
@@ -327,6 +328,10 @@ var plugin = function (args) {
         };
     }
     var overallOutputArgs = buildOverallOutputArgs(outputStreams);
+    console.log("audioReorder: setting reordered streams/args", {
+        streams: outputStreams,
+        overallOutputArgs: overallOutputArgs,
+    });
     args.variables.ffmpegCommand.streams = outputStreams;
     args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
     args.variables.ffmpegCommand.overallOuputArguments = overallOutputArgs;
