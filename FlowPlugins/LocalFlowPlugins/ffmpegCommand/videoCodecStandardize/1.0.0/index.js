@@ -272,12 +272,17 @@ var plugin = function (args) {
     }
     if (!changed && !needsStrict) {
         args.jobLog("Video titles already standardized; no remapping needed.");
+        console.log("videoCodecStandardize: no-change (titles already standardized)");
         return {
             outputFileObj: args.inputFileObj,
             outputNumber: 1,
             variables: args.variables,
         };
     }
+    console.log("videoCodecStandardize: setting streams/args", {
+        streams: newStreams,
+        overallOutputArgs: overallOutputArgs,
+    });
     args.variables.ffmpegCommand.streams = newStreams;
     args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
     args.variables.ffmpegCommand.overallOuputArguments = overallOutputArgs;

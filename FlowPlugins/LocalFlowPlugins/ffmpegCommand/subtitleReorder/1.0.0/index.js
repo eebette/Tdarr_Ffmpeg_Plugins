@@ -234,12 +234,14 @@ var plugin = function (args) {
     var outputStreams = reordered.concat(otherStreams);
     if (!changed) {
         args.jobLog("Subtitle order already matches desired priority; no remapping needed.");
+        console.log("subtitleReorder: no-change (order already correct)");
         return {
             outputFileObj: args.inputFileObj,
             outputNumber: 1,
             variables: args.variables,
         };
     }
+    console.log("subtitleReorder: setting reordered streams", { streams: outputStreams });
     args.variables.ffmpegCommand.streams = outputStreams;
     args.variables.ffmpegCommand.shouldProcess = true;
     args.variables.ffmpegCommand.init = true;
