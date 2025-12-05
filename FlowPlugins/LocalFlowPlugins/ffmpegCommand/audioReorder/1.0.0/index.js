@@ -155,9 +155,11 @@ var buildOverallOutputArgs = function (streams) {
     return activeStreams.reduce(function (acc, stream) {
         var replacedArgs = applyPlaceholders(stream.outputArgs || [], activeStreams, stream);
         var mapArgs = normalizeMapArgs(stream.mapArgs || [], activeStreams, stream);
-        var outputArgsForStream = replacedArgs.length === 0
-            ? [getCodecSelectorForStream(activeStreams, stream), "copy"]
-            : normalizeCodecSelectors(replacedArgs, activeStreams, stream);
+        var normalizedArgs = normalizeCodecSelectors(replacedArgs, activeStreams, stream);
+        var hasCodecFlag = normalizedArgs.some(function (arg) { return /^-(?:c|codec)(?::[a-z]+(?::\\d+)?)?$/i.test(arg); });
+        var outputArgsForStream = hasCodecFlag
+            ? normalizedArgs
+            : [getCodecSelectorForStream(activeStreams, stream), "copy"].concat(normalizedArgs);
         acc.push.apply(acc, mapArgs);
         acc.push.apply(acc, outputArgsForStream);
         return acc;
