@@ -49,6 +49,13 @@ var stripCodecArgs = function (outputArgs) {
     return cleaned;
 };
 var commentaryRegex = /commentary|narration|descriptive|director|producer|writer/i;
+var codecTypeSelector = {
+    video: "v",
+    audio: "a",
+    subtitle: "s",
+    data: "d",
+    attachment: "t",
+};
 var getOutputStreamIndex = function (streams, stream) {
     var filtered = streams.filter(function (s) { return !s.removed; });
     var position = filtered.findIndex(function (s) { return s.index === stream.index; });
@@ -60,8 +67,8 @@ var getOutputStreamTypeIndex = function (streams, stream) {
     return position === -1 ? 0 : position;
 };
 var getCodecSelectorForStream = function (streams, stream) {
-    var selector = stream.codec_type === "subtitle" ? "s" : stream.codec_type || "";
-    if (!selector || selector.length !== 1) {
+    var selector = codecTypeSelector[stream.codec_type];
+    if (!selector) {
         return "-c:".concat(getOutputStreamIndex(streams, stream));
     }
     return "-c:".concat(selector, ":").concat(getOutputStreamTypeIndex(streams, stream));
@@ -94,7 +101,7 @@ var normalizeCodecSelectors = function (outputArgs, streams, stream) {
     });
 };
 var normalizeMapArgs = function (mapArgs, streams, stream) {
-    var selector = stream.codec_type === "subtitle" ? "s" : stream.codec_type || "";
+    var selector = codecTypeSelector[stream.codec_type] || stream.codec_type || "";
     if (!selector) {
         return mapArgs;
     }
