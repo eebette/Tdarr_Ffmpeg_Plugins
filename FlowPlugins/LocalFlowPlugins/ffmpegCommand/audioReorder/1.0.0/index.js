@@ -317,7 +317,17 @@ var plugin = function (args) {
             outputArgs: updatedOutputArgs,
         }));
     });
-    var outputStreams = reorderedAudio.concat(otherStreams);
+    // Reinsert reordered audio streams back into their original audio slot positions
+    var outputStreams = streams.slice();
+    var audioPositions = [];
+    streams.forEach(function (s, idx) {
+        if (s.codec_type === "audio") {
+            audioPositions.push(idx);
+        }
+    });
+    audioPositions.forEach(function (pos, idx) {
+        outputStreams[pos] = reorderedAudio[idx];
+    });
     if (!changed) {
         args.jobLog("Audio order already matches desired priority; no remapping needed.");
         console.log("audioReorder: no-change (order already correct)");

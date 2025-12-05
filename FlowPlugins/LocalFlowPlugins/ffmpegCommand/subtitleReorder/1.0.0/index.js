@@ -231,7 +231,17 @@ var plugin = function (args) {
             outputArgs: updatedOutputArgs,
         }));
     });
-    var outputStreams = reordered.concat(otherStreams);
+    // Reinsert reordered subtitle streams back into their original subtitle slot positions
+    var outputStreams = streams.slice();
+    var subtitlePositions = [];
+    streams.forEach(function (s, idx) {
+        if (s.codec_type === "subtitle") {
+            subtitlePositions.push(idx);
+        }
+    });
+    subtitlePositions.forEach(function (pos, idx) {
+        outputStreams[pos] = reordered[idx];
+    });
     if (!changed) {
         args.jobLog("Subtitle order already matches desired priority; no remapping needed.");
         console.log("subtitleReorder: no-change (order already correct)");

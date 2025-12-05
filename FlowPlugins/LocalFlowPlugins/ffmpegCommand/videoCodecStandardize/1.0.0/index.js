@@ -131,13 +131,21 @@ var hasDolbyVisionStream = function (metaStreams) {
 };
 var setMetadataArg = function (outputArgs, title) {
     var cleaned = [];
+    var existingTitle = "";
     for (var i = 0; i < outputArgs.length; i += 1) {
         var arg = outputArgs[i];
         if (/^-metadata:s:v/.test(arg)) {
+            if (i + 1 < outputArgs.length && outputArgs[i + 1].indexOf("title=") === 0) {
+                existingTitle = outputArgs[i + 1].split("=").slice(1).join("=");
+            }
             i += 1;
             continue;
         }
         cleaned.push(arg);
+    }
+    if (existingTitle === title) {
+        // Title already matches desired; avoid re-adding to keep command stable.
+        return cleaned;
     }
     cleaned.push("-metadata:s:v:{outputTypeIndex}");
     cleaned.push("title=".concat(title));
@@ -259,7 +267,8 @@ var plugin = function (args) {
     var overallOutputArgs = buildOverallOutputArgs(newStreams);
     var needsStrict = false;
     if (hasDolbyVisionStream(meta)) {
-        var hasStrict = overallOutputArgs.some(function (arg) { return arg === "-strict"; });
+        var presetStrict = (args.variables.ffmpegCommand.overallOutputArguments || args.variables.ffmpegCommand.overallOuputArguments || []).some(function (arg) { return arg === "-strict"; });
+        var hasStrict = presetStrict || overallOutputArgs.some(function (arg) { return arg === "-strict"; });
         if (!hasStrict) {
             needsStrict = true;
             // place -strict after any video codec args to ensure DV RPU is preserved
