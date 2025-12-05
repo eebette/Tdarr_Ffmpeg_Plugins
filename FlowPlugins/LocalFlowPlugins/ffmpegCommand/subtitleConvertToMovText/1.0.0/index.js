@@ -48,6 +48,99 @@ var stripCodecArgs = function (outputArgs) {
     }
     return cleaned;
 };
+var commentaryRegex = /commentary|narration|descriptive|director|producer|writer/i;
+var getOutputStreamIndex = function (streams, stream) {
+    var filtered = streams.filter(function (s) { return !s.removed; });
+    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
+    return position === -1 ? 0 : position;
+};
+var getOutputStreamTypeIndex = function (streams, stream) {
+    var filtered = streams.filter(function (s) { return !s.removed && s.codec_type === stream.codec_type; });
+    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
+    return position === -1 ? 0 : position;
+};
+var getCodecSelectorForStream = function (streams, stream) {
+    var selector = stream.codec_type === "subtitle" ? "s" : stream.codec_type || "";
+    if (!selector || selector.length !== 1) {
+        return "-c:".concat(getOutputStreamIndex(streams, stream));
+    }
+    return "-c:".concat(selector, ":").concat(getOutputStreamTypeIndex(streams, stream));
+};
+var applyPlaceholders = function (args, streams, stream) {
+    return args.map(function (arg) {
+        var updated = arg;
+        if (updated.includes("{outputIndex}")) {
+            updated = updated.replace("{outputIndex}", String(getOutputStreamIndex(streams, stream)));
+        }
+        if (updated.includes("{outputTypeIndex}")) {
+            updated = updated.replace("{outputTypeIndex}", String(getOutputStreamTypeIndex(streams, stream)));
+        }
+        return updated;
+    });
+};
+var normalizeCodecSelectors = function (outputArgs, streams, stream) {
+    var codecSelector = getCodecSelectorForStream(streams, stream);
+    return outputArgs.map(function (arg) {
+        if (/^-c:[a-z]+$/.test(arg)) {
+            return codecSelector;
+        }
+        if (/^-c:\d+$/.test(arg)) {
+            return codecSelector;
+        }
+        if (/^-c:[a-z]+:\d+$/.test(arg)) {
+            return codecSelector;
+        }
+        return arg;
+    });
+};
+var normalizeMapArgs = function (mapArgs, streams, stream) {
+    var selector = stream.codec_type === "subtitle" ? "s" : stream.codec_type || "";
+    if (!selector) {
+        return mapArgs;
+    }
+    var mapTarget = "0:".concat(selector, ":").concat(getOutputStreamTypeIndex(streams, stream)).concat(selector === "v" ? "" : "?");
+    return mapArgs.map(function (arg, idx) {
+        var isMapValue = idx > 0 && mapArgs[idx - 1] === "-map";
+        if (isMapValue && /^\d+:\d+$/.test(arg)) {
+            return mapTarget;
+        }
+        return arg;
+    });
+};
+var buildOverallOutputArgs = function (streams) {
+    var activeStreams = (streams || []).filter(function (s) { return !s.removed; });
+    return activeStreams.reduce(function (acc, stream) {
+        var replacedArgs = applyPlaceholders(stream.outputArgs || [], activeStreams, stream);
+        var mapArgs = normalizeMapArgs(stream.mapArgs || [], activeStreams, stream);
+        var outputArgsForStream = replacedArgs.length === 0
+            ? [getCodecSelectorForStream(activeStreams, stream), "copy"]
+            : normalizeCodecSelectors(replacedArgs, activeStreams, stream);
+        acc.push.apply(acc, mapArgs);
+        acc.push.apply(acc, outputArgsForStream);
+        return acc;
+    }, []);
+};
+var extractLanguageFromOutputArgs = function (outputArgs) {
+    for (var i = 0; i < outputArgs.length - 1; i += 1) {
+        if (/^-metadata:s:s/.test(outputArgs[i]) && /^language=/.test(outputArgs[i + 1])) {
+            return outputArgs[i + 1].split("=")[1];
+        }
+    }
+    return "";
+};
+var detectTypeLabel = function (meta) {
+    var commentary = commentaryRegex.test((meta.title
+        || (meta.tags && (meta.tags.title || meta.tags.handler_name))
+        || "").toString());
+    var forced = Boolean(meta.disposition && meta.disposition.forced);
+    if (commentary) {
+        return "commentary";
+    }
+    if (forced) {
+        return "forced";
+    }
+    return "normal";
+};
 var details = function () { return ({
     name: "Subtitles: Convert to mov_text (MP4)",
     description: "Converts subtitle streams that MP4 cannot store (e.g., SRT/ASS) to mov_text/tx3g so mp4 muxing succeeds, and drops image-based subtitles MP4 cannot hold.",
@@ -101,6 +194,8 @@ var plugin = function (args) {
     var changed = false;
     var conversions = 0;
     var removals = 0;
+    var imageRemovals = 0;
+    var duplicateRemovals = 0;
     var updatedStreams = mappedStreams.map(function (stream) {
         if (stream.removed || stream.codec_type !== "subtitle") {
             return stream;
@@ -122,6 +217,7 @@ var plugin = function (args) {
         }
         if (imageCodecs.indexOf(codec) !== -1) {
             removals += 1;
+            imageRemovals += 1;
             changed = true;
             return Object.assign({}, stream, { removed: true });
         }
@@ -135,15 +231,43 @@ var plugin = function (args) {
             codec_name: "mov_text",
         });
     });
+    var seen = new Set();
+    updatedStreams = updatedStreams.map(function (stream) {
+        if (stream.removed || stream.codec_type !== "subtitle") {
+            return stream;
+        }
+        var meta = metaByIndex.get(stream.index) || {};
+        var lang = normalize((stream.language
+            || (meta.tags && meta.tags.language)
+            || extractLanguageFromOutputArgs(stream.outputArgs || [])
+            || ""));
+        var typeLabel = detectTypeLabel(meta);
+        var key = "".concat(lang, "|").concat(typeLabel);
+        if (seen.has(key)) {
+            removals += 1;
+            duplicateRemovals += 1;
+            changed = true;
+            return Object.assign({}, stream, { removed: true });
+        }
+        seen.add(key);
+        return stream;
+    });
     if (changed) {
-        args.variables.ffmpegCommand.streams = updatedStreams.filter(function (s) { return !s.removed; });
+        var keptStreams = updatedStreams.filter(function (s) { return !s.removed; });
+        var overallOutputArgs = buildOverallOutputArgs(keptStreams);
+        args.variables.ffmpegCommand.streams = keptStreams;
+        args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
+        args.variables.ffmpegCommand.overallOuputArguments = overallOutputArgs;
         args.variables.ffmpegCommand.shouldProcess = true;
         args.variables.ffmpegCommand.init = true;
         if (conversions > 0) {
             args.jobLog("Converted ".concat(conversions, " subtitle stream(s) to mov_text for MP4 compatibility."));
         }
-        if (removals > 0) {
-            args.jobLog("Removed ".concat(removals, " image-based subtitle stream(s) not supported in MP4."));
+        if (imageRemovals > 0) {
+            args.jobLog("Removed ".concat(imageRemovals, " image-based subtitle stream(s) not supported in MP4."));
+        }
+        if (duplicateRemovals > 0) {
+            args.jobLog("Removed ".concat(duplicateRemovals, " duplicate subtitle stream(s)."));
         }
     }
     return {
