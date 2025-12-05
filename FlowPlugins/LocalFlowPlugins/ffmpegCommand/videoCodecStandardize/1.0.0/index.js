@@ -132,23 +132,26 @@ var hasDolbyVisionStream = function (metaStreams) {
 var setMetadataArg = function (outputArgs, title) {
     var cleaned = [];
     var existingTitle = "";
+    var existingHandler = "";
     for (var i = 0; i < outputArgs.length; i += 1) {
         var arg = outputArgs[i];
         if (/^-metadata:s:v/.test(arg)) {
             if (i + 1 < outputArgs.length && outputArgs[i + 1].indexOf("title=") === 0) {
                 existingTitle = outputArgs[i + 1].split("=").slice(1).join("=");
             }
+            if (i + 1 < outputArgs.length && outputArgs[i + 1].indexOf("handler_name=") === 0) {
+                existingHandler = outputArgs[i + 1].split("=").slice(1).join("=");
+            }
             i += 1;
             continue;
         }
         cleaned.push(arg);
     }
-    if (existingTitle === title) {
-        // Title already matches desired; avoid re-adding to keep command stable.
-        return cleaned;
-    }
+    // Always refresh both title and handler_name together so MP4 keeps the label.
     cleaned.push("-metadata:s:v:{outputTypeIndex}");
     cleaned.push("title=".concat(title));
+    cleaned.push("-metadata:s:v:{outputTypeIndex}");
+    cleaned.push("handler_name=".concat(title));
     return cleaned;
 };
 var getOutputStreamIndex = function (streams, stream) {
