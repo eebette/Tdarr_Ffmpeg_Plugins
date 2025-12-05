@@ -90,19 +90,23 @@ var getDolbyVisionInfo = function (stream, codecName, profile) {
     var sideData = Array.isArray(stream.side_data_list) ? stream.side_data_list : [];
     var tags = stream.tags || {};
     var handler = normalize(tags.handler_name || "");
+    var hasDoviSideData = sideData.some(function (entry) {
+        var entryType = normalize(entry.side_data_type || "");
+        return entryType === "dovi configuration record" || entryType.includes("dovi");
+    });
+    var dvCodec = /^dv/.test(codecName) || codecName.includes("dovi");
+    var handlerHasDv = /dolby\s*vision|dovi/.test(handler);
+    var profileHasDv = /dolby\s*vision/i.test(profile);
     var dvConfig = sideData.find(function (entry) { return normalize(entry.side_data_type || "") === "dovi configuration record"; }) || {};
     var configProfile = typeof dvConfig.dv_profile === "number" ? dvConfig.dv_profile : null;
     var compatId = typeof dvConfig.dv_bl_signal_compatibility_id === "number" ? dvConfig.dv_bl_signal_compatibility_id : null;
     var handlerMatch = handler.match(/dvp\s*=\s*([0-9]+(?:\.[0-9]+)?)/);
     var handlerProfile = handlerMatch ? handlerMatch[1] : null;
+    var profileMatch = (profile.match(/(\d+(?:\.\d+)?)/) || [])[1];
     var inferredProfile = configProfile !== null ? configProfile.toString()
-        : (handlerProfile || (profile.match(/(\d+(?:\.\d+)?)/) || [])[1]);
-    var isDv = codecName.startsWith("dvh")
-        || codecName.startsWith("dv")
-        || codecName.includes("dovi")
-        || /dolby\s*vision/i.test(profile)
-        || Boolean(inferredProfile);
-    if (!isDv) {
+        : (handlerProfile || (dvCodec || hasDoviSideData || handlerHasDv || profileHasDv ? profileMatch : null));
+    var hasDvSignal = dvCodec || hasDoviSideData || handlerHasDv || profileHasDv || Boolean(configProfile) || Boolean(handlerProfile);
+    if (!hasDvSignal) {
         return { isDolbyVision: false, profileText: "" };
     }
     var profileText = inferredProfile || "Unknown";
