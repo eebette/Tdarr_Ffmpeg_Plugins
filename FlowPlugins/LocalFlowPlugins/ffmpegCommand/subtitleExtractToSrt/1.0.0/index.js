@@ -274,6 +274,9 @@ var plugin = function (args) { return (function () {
     var passthroughStreams = existingStreams.filter(function (s) { return s.codec_type !== "subtitle"; });
     args.variables.ffmpegCommand.streams = passthroughStreams.concat(combinedSubs);
     args.variables.ffmpegCommand.additionalInputs = additionalInputs;
+    if (!tempFiles.includes(outDir)) {
+        tempFiles.push(outDir);
+    }
     args.variables.ffmpegCommand.tempFiles = tempFiles;
     args.variables.ffmpegCommand.shouldProcess = true;
     args.variables.ffmpegCommand.init = true;

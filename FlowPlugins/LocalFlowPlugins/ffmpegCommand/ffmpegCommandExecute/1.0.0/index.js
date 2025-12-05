@@ -334,7 +334,13 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 tempFiles = args.variables.ffmpegCommand.tempFiles || [];
                 tempFiles.forEach(function (filePath) {
                     try {
-                        fs.unlinkSync(filePath);
+                        var stats = fs.statSync(filePath);
+                        if (stats.isDirectory()) {
+                            fs.rmSync(filePath, { recursive: true, force: true });
+                        }
+                        else {
+                            fs.unlinkSync(filePath);
+                        }
                     }
                     catch (err) {
                         args.jobLog("Cleanup warning: ".concat(filePath, " ").concat(err.message));

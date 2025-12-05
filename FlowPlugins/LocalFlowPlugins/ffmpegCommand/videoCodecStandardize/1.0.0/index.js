@@ -120,6 +120,11 @@ var buildTitle = function (stream) {
     var hdr = detectHdrLabel(stream);
     return "".concat(resolution, " ").concat(codec, " ").concat(hdr);
 };
+var hasDolbyVisionStream = function (metaStreams) {
+    return (metaStreams || []).some(function (stream) {
+        return detectHdrLabel(stream).toLowerCase().indexOf("dolby vision") !== -1;
+    });
+};
 var setMetadataArg = function (outputArgs, title) {
     var cleaned = [];
     for (var i = 0; i < outputArgs.length; i += 1) {
@@ -248,6 +253,17 @@ var plugin = function (args) {
         });
     });
     var overallOutputArgs = buildOverallOutputArgs(newStreams);
+    if (hasDolbyVisionStream(meta)) {
+        var hasStrict = overallOutputArgs.some(function (arg) { return arg === "-strict"; });
+        if (!hasStrict) {
+            // place -strict after any video codec args to ensure DV RPU is preserved
+            var insertAt = overallOutputArgs.findIndex(function (arg) { return /^-c:v/.test(arg); });
+            if (insertAt === -1) {
+                insertAt = overallOutputArgs.length;
+            }
+            overallOutputArgs.splice(insertAt + 2, 0, "-strict", "unofficial");
+        }
+    }
     args.variables.ffmpegCommand.streams = newStreams;
     args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
     args.variables.ffmpegCommand.overallOuputArguments = overallOutputArgs;
