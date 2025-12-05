@@ -261,6 +261,14 @@ var plugin = function (args) { return (function () {
             inputIdx += 1;
         });
     });
+    if (newSubtitleStreams.length === 0) {
+        args.jobLog("No subtitle streams converted to SRT; skipping extraction/OCR.");
+        return {
+            outputFileObj: args.inputFileObj,
+            outputNumber: 1,
+            variables: args.variables,
+        };
+    }
     var combinedSubs = originalSubtitleStreams.concat(newSubtitleStreams);
     if (combinedSubs.length === 0) {
         args.jobLog("No subtitles were extracted or OCR'd.");

@@ -232,11 +232,17 @@ var plugin = function (args) {
         }));
     });
     var outputStreams = reordered.concat(otherStreams);
-    if (changed) {
-        args.variables.ffmpegCommand.streams = outputStreams;
-        args.variables.ffmpegCommand.shouldProcess = true;
-        args.variables.ffmpegCommand.init = true;
+    if (!changed) {
+        args.jobLog("Subtitle order already matches desired priority; no remapping needed.");
+        return {
+            outputFileObj: args.inputFileObj,
+            outputNumber: 1,
+            variables: args.variables,
+        };
     }
+    args.variables.ffmpegCommand.streams = outputStreams;
+    args.variables.ffmpegCommand.shouldProcess = true;
+    args.variables.ffmpegCommand.init = true;
     return {
         outputFileObj: args.inputFileObj,
         outputNumber: 1,

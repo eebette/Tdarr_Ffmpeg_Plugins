@@ -318,14 +318,20 @@ var plugin = function (args) {
         }));
     });
     var outputStreams = reorderedAudio.concat(otherStreams);
+    if (!changed) {
+        args.jobLog("Audio order already matches desired priority; no remapping needed.");
+        return {
+            outputFileObj: args.inputFileObj,
+            outputNumber: 1,
+            variables: args.variables,
+        };
+    }
     var overallOutputArgs = buildOverallOutputArgs(outputStreams);
     args.variables.ffmpegCommand.streams = outputStreams;
     args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
     args.variables.ffmpegCommand.overallOuputArguments = overallOutputArgs;
-    if (changed) {
-        args.variables.ffmpegCommand.shouldProcess = true;
-        args.variables.ffmpegCommand.init = true;
-    }
+    args.variables.ffmpegCommand.shouldProcess = true;
+    args.variables.ffmpegCommand.init = true;
     return {
         outputFileObj: args.inputFileObj,
         outputNumber: 1,

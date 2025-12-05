@@ -257,9 +257,11 @@ var plugin = function (args) {
         });
     });
     var overallOutputArgs = buildOverallOutputArgs(newStreams);
+    var needsStrict = false;
     if (hasDolbyVisionStream(meta)) {
         var hasStrict = overallOutputArgs.some(function (arg) { return arg === "-strict"; });
         if (!hasStrict) {
+            needsStrict = true;
             // place -strict after any video codec args to ensure DV RPU is preserved
             var insertAt = overallOutputArgs.findIndex(function (arg) { return /^-c:v/.test(arg); });
             if (insertAt === -1) {
@@ -268,13 +270,19 @@ var plugin = function (args) {
             overallOutputArgs.splice(insertAt + 2, 0, "-strict", "unofficial");
         }
     }
+    if (!changed && !needsStrict) {
+        args.jobLog("Video titles already standardized; no remapping needed.");
+        return {
+            outputFileObj: args.inputFileObj,
+            outputNumber: 1,
+            variables: args.variables,
+        };
+    }
     args.variables.ffmpegCommand.streams = newStreams;
     args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
     args.variables.ffmpegCommand.overallOuputArguments = overallOutputArgs;
-    if (changed) {
-        args.variables.ffmpegCommand.shouldProcess = true;
-        args.variables.ffmpegCommand.init = true;
-    }
+    args.variables.ffmpegCommand.shouldProcess = true;
+    args.variables.ffmpegCommand.init = true;
     return {
         outputFileObj: args.inputFileObj,
         outputNumber: 1,
