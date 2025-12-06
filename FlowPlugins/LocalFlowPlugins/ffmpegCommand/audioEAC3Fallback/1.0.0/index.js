@@ -345,9 +345,20 @@ var plugin = function (args) {
         var outputArgs = entry.action === "transcode"
             ? makeEac3Args(entry.source, false)
             : makeCopyArgs(entry.source, false);
+        // Minimal metadata needed for downstream ordering/default logic.
+        var tags = entry.source.tags || {};
         outputStreams.push({
             index: entry.id,
             codec_type: "audio",
+            codec_name: entry.action === "transcode" ? "eac3" : entry.source.codec_name,
+            channels: entry.source.channels,
+            channel_layout: entry.source.channel_layout,
+            tags: {
+                language: tags.language,
+                title: tags.title,
+                handler_name: tags.handler_name,
+                BPS: tags.BPS,
+            },
             mapArgs: getMapArgs(entry.source),
             outputArgs: outputArgs,
             inputArgs: [],
