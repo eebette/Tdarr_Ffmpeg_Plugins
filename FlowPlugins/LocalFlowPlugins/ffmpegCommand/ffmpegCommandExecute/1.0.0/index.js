@@ -168,11 +168,21 @@ var buildNegativeMapArgs = function (removedStreams) {
     if (targets.length === 0) {
         return [];
     }
-    return targets.reduce(function (acc, stream) {
-        acc.push('-map');
-        acc.push("-0:".concat(stream.index));
-        return acc;
-    }, []);
+    var args = [];
+    var typeSelectors = new Set();
+    targets.forEach(function (stream) {
+        args.push('-map');
+        args.push("-0:".concat(stream.index));
+        var selector = codecTypeToSelector[stream.codec_type];
+        if (selector) {
+            typeSelectors.add(selector);
+        }
+    });
+    typeSelectors.forEach(function (selector) {
+        args.push('-map');
+        args.push("-0:".concat(selector));
+    });
+    return args;
 };
 var moveFilterArgsBeforeMaps = function (args) {
     var filterArgs = [];
