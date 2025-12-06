@@ -49,17 +49,19 @@ var getStreams = function (fileObj) {
     });
 };
 var formatResolution = function (stream) {
+    // Use both width and height so cropped bars still map to the intended tier.
     var height = stream.height || (stream.tags && stream.tags.height) || 0;
-    if (height >= 2160) {
+    var width = stream.width || (stream.tags && stream.tags.width) || 0;
+    if (height >= 2160 || width >= 3800) {
         return "4K";
     }
-    if (height >= 1440) {
+    if (height >= 1440 || width >= 2500) {
         return "1440p";
     }
-    if (height >= 1080) {
+    if (height >= 1000 || width >= 1900) {
         return "1080p";
     }
-    if (height >= 720) {
+    if (height >= 700 || width >= 1200) {
         return "720p";
     }
     if (height > 0) {
@@ -124,14 +126,16 @@ var buildTitle = function (stream) {
     var hdr = detectHdrLabel(stream);
     return "".concat(resolution, " ").concat(codec, " ").concat(hdr);
 };
-var setMetadataArg = function (outputArgs, title, stream) {
+var setMetadataArg = function (outputArgs, title, stream, container) {
+    var isMkv = normalize(container) === "mkv";
+    var metadataKey = isMkv ? "title" : "handler_name";
     var cleaned = [];
-    var existingHandler = "";
+    var existingValue = "";
     for (var i = 0; i < outputArgs.length; i += 1) {
         var arg = outputArgs[i];
         if (/^-metadata:s:v/.test(arg)) {
-            if (i + 1 < outputArgs.length && outputArgs[i + 1].indexOf("handler_name=") === 0) {
-                existingHandler = outputArgs[i + 1].split("=").slice(1).join("=");
+            if (i + 1 < outputArgs.length && outputArgs[i + 1].indexOf("".concat(metadataKey, "=")) === 0) {
+                existingValue = outputArgs[i + 1].split("=").slice(1).join("=");
             }
             i += 1;
             continue;
@@ -139,15 +143,15 @@ var setMetadataArg = function (outputArgs, title, stream) {
         cleaned.push(arg);
     }
     // Fall back to stream tags when outputArgs are empty.
-    var tagHandler = (stream.tags && stream.tags.handler_name) || "";
-    var handlerMatches = (existingHandler || tagHandler) === title;
-    if (handlerMatches) {
+    var tagValue = stream.tags ? (isMkv ? stream.tags.title : stream.tags.handler_name) : "";
+    var metadataMatches = (existingValue || tagValue) === title;
+    if (metadataMatches) {
         // Nothing to change.
         return outputArgs;
     }
-    // Refresh handler_name so MP4 keeps the label.
+    // Refresh the relevant metadata key depending on container type.
     cleaned.push("-metadata:s:v:{outputTypeIndex}");
-    cleaned.push("handler_name=".concat(title));
+    cleaned.push("".concat(metadataKey, "=").concat(title));
     return cleaned;
 };
 var getOutputStreamIndex = function (streams, stream) {
@@ -229,6 +233,7 @@ var plugin = function (args) {
     args.inputs = inputs;
     flowUtils.checkFfmpegCommandInit(args);
     var streams = args.variables.ffmpegCommand.streams || [];
+    var container = normalize((args.inputFileObj || {}).container || "");
     if (streams.length === 0) {
         args.jobLog("No mapped streams to update.");
         return {
@@ -255,7 +260,7 @@ var plugin = function (args) {
         }
         var metaStream = metaByIndex.get(stream.index) || meta[0];
         var title = buildTitle(metaStream);
-        var updatedArgs = setMetadataArg(stream.outputArgs || [], title, stream);
+        var updatedArgs = setMetadataArg(stream.outputArgs || [], title, stream, container);
         if ((stream.outputArgs || []).join("|") !== updatedArgs.join("|")) {
             changed = true;
         }
