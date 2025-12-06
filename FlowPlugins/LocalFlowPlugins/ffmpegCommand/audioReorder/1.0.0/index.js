@@ -247,6 +247,7 @@ var plugin = function (args) {
     };
     var orderedLanguages = languageOrder.map(resolveLanguage);
     var streams = args.variables.ffmpegCommand.streams || [];
+    var originalStreams = streams.slice();
     var audioStreams = streams.filter(function (s) { return s.codec_type === "audio"; });
     var otherStreams = streams.filter(function (s) { return s.codec_type !== "audio"; });
     if (audioStreams.length === 0) {
@@ -387,6 +388,31 @@ var plugin = function (args) {
         };
     }
     var overallOutputArgs = buildOverallOutputArgs(outputStreams);
+    // If the resulting mapping/args are identical to what we already had, skip processing.
+    var previousOutputArgs = args.variables.ffmpegCommand.overallOutputArguments
+        || args.variables.ffmpegCommand.overallOuputArguments
+        || [];
+    var streamsEqual = outputStreams.length === originalStreams.length
+        && outputStreams.every(function (s, idx) {
+            var prev = originalStreams[idx];
+            if (!prev) {
+                return false;
+            }
+            var sameIndex = s.index === prev.index && s.codec_type === prev.codec_type && !!s.removed === !!prev.removed;
+            var sameMap = (s.mapArgs || []).join("|") === (prev.mapArgs || []).join("|");
+            var sameOut = (s.outputArgs || []).join("|") === (prev.outputArgs || []).join("|");
+            return sameIndex && sameMap && sameOut;
+        });
+    var argsEqual = overallOutputArgs.join("|") === previousOutputArgs.join("|");
+    if (streamsEqual && argsEqual) {
+        args.jobLog("Audio order already matches desired priority; no remapping needed.");
+        console.log("audioReorder: no-change (order already correct)");
+        return {
+            outputFileObj: args.inputFileObj,
+            outputNumber: 1,
+            variables: args.variables,
+        };
+    }
     console.log("audioReorder: setting reordered streams/args", {
         streams: outputStreams,
         overallOutputArgs: overallOutputArgs,
