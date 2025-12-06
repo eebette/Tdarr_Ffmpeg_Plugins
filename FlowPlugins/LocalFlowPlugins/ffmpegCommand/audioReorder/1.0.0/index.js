@@ -312,6 +312,33 @@ var plugin = function (args) {
         }
         return a.originalIndex - b.originalIndex;
     });
+    // If ordering already matches and default disposition is already on the target stream, skip changes.
+    var targetDefaultIndex = sortable.findIndex(function (item) { return item.commentary === 0; });
+    if (targetDefaultIndex === -1) {
+        targetDefaultIndex = 0;
+    }
+    var targetDefaultId = sortable[targetDefaultIndex].stream.index;
+    var currentDefaultId = (function () {
+        for (var i = 0; i < audioStreams.length; i += 1) {
+            var parsed = parseDisposition(audioStreams[i].outputArgs || []);
+            var existingDefault = parsed.default !== null ? parsed.default : (audioStreams[i].disposition && audioStreams[i].disposition.default === 1);
+            if (existingDefault) {
+                return audioStreams[i].index;
+            }
+        }
+        return null;
+    })();
+    var orderMatches = audioStreams.length === sortable.length
+        && audioStreams.every(function (s, idx) { return s.index === sortable[idx].stream.index; });
+    if (orderMatches && currentDefaultId === targetDefaultId) {
+        args.jobLog("Audio order already matches desired priority; no remapping needed.");
+        console.log("audioReorder: no-change (order already correct)");
+        return {
+            outputFileObj: args.inputFileObj,
+            outputNumber: 1,
+            variables: args.variables,
+        };
+    }
     var reorderedAudio = [];
     var firstDefaultIndex = sortable.findIndex(function (item) { return item.commentary === 0; });
     if (firstDefaultIndex === -1) {
