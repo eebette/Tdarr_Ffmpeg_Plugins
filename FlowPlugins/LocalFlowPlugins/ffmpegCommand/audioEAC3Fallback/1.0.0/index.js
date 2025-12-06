@@ -336,6 +336,7 @@ var plugin = function (args) {
             mapArgs: getMapArgs(stream),
             outputArgs: makeCopyArgs(stream, false),
             inputArgs: [],
+            typeIndex: typeof stream.typeIndex === "number" ? stream.typeIndex : undefined,
             removed: false,
         });
     });
@@ -350,6 +351,8 @@ var plugin = function (args) {
             mapArgs: getMapArgs(entry.source),
             outputArgs: outputArgs,
             inputArgs: [],
+            sourceTypeIndex: typeof entry.source.typeIndex === "number" ? entry.source.typeIndex : undefined,
+            typeIndex: typeof entry.source.typeIndex === "number" ? entry.source.typeIndex : undefined,
             removed: false,
         });
     });
@@ -360,6 +363,7 @@ var plugin = function (args) {
             mapArgs: getMapArgs(stream),
             outputArgs: makeCopyArgs(stream, false),
             inputArgs: [],
+            typeIndex: typeof stream.typeIndex === "number" ? stream.typeIndex : undefined,
             removed: false,
         });
     });
@@ -370,6 +374,7 @@ var plugin = function (args) {
             mapArgs: getMapArgs(stream),
             outputArgs: makeCopyArgs(stream, false),
             inputArgs: [],
+            typeIndex: typeof stream.typeIndex === "number" ? stream.typeIndex : undefined,
             removed: false,
         });
     });

@@ -333,8 +333,10 @@ var plugin = function (args) {
             changed = true;
         }
         reorderedAudio.push(Object.assign({}, item.stream, {
-            mapArgs: getMapArgs(item.stream),
+            // Preserve original mapping (which may include a specific sourceTypeIndex).
+            mapArgs: item.stream.mapArgs || getMapArgs(item.stream),
             outputArgs: updatedOutputArgs,
+            sourceTypeIndex: item.stream.sourceTypeIndex,
         }));
     });
     // Reinsert reordered audio streams back into their original audio slot positions
