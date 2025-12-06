@@ -350,6 +350,10 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     ? __spreadArray([], args.variables.ffmpegCommand.overallOutputArguments, true)
                     : __spreadArray([], args.variables.ffmpegCommand.overallOuputArguments, true);
                 var configuredHasMaps = configuredOutputArgs.some(function (arg) { return arg === '-map'; });
+                var targetContainer = (args.variables.ffmpegCommand.container
+                    || (args.inputFileObj && args.inputFileObj.container)
+                    || ((args.inputFileObj && args.inputFileObj._id) || '').split('.').pop()
+                    || 'mkv').toLowerCase();
                 var streamOutputArgs = buildOutputArgsFromStreams(streams);
                 outputArgs = configuredHasMaps && configuredOutputArgs.length > 0
                     ? configuredOutputArgs
@@ -362,6 +366,11 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 if (hadRemovedDataStream) {
                     // Guard against data streams sneaking back via implicit/default mapping.
                     outputArgs.push('-dn');
+                    if (targetContainer === 'mp4') {
+                        // Strip chapter/stream metadata for data tracks when explicitly removed.
+                        outputArgs.push('-map_metadata:c');
+                        outputArgs.push('-1');
+                    }
                 }
                 if (shouldProcess && hasDolbyVisionStream(args.inputFileObj)) {
                     outputArgs = insertStrictAfterVideoCodec(outputArgs);
