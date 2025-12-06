@@ -163,6 +163,17 @@ var buildOutputArgsFromStreams = function (streams) {
         return acc;
     }, []);
 };
+var buildNegativeMapArgs = function (removedStreams) {
+    var targets = (removedStreams || []).filter(function (s) { return typeof s.index === 'number'; });
+    if (targets.length === 0) {
+        return [];
+    }
+    return targets.reduce(function (acc, stream) {
+        acc.push('-map');
+        acc.push("-0:".concat(stream.index));
+        return acc;
+    }, []);
+};
 var moveFilterArgsBeforeMaps = function (args) {
     var filterArgs = [];
     var argsWithoutFilters = [];
@@ -285,6 +296,8 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     shouldProcess = true;
                 }
                 inputArgs = __spreadArray([], args.variables.ffmpegCommand.overallInputArguments, true);
+                var removedStreams = streams.filter(function (s) { return s.removed; });
+                var hadRemovedDataStream = removedStreams.some(function (s) { return s.codec_type === 'data'; });
                 streams = streams.filter(function (stream) {
                     if (stream.removed) {
                         shouldProcess = true;
@@ -316,6 +329,15 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 outputArgs = configuredHasMaps && configuredOutputArgs.length > 0
                     ? configuredOutputArgs
                     : __spreadArray(__spreadArray([], streamOutputArgs, true), configuredOutputArgs, true);
+                var negativeMapArgs = buildNegativeMapArgs(removedStreams);
+                if (negativeMapArgs.length > 0) {
+                    outputArgs.push.apply(outputArgs, negativeMapArgs);
+                    shouldProcess = true;
+                }
+                if (hadRemovedDataStream) {
+                    // Guard against data streams sneaking back via implicit/default mapping.
+                    outputArgs.push('-dn');
+                }
                 if (shouldProcess && hasDolbyVisionStream(args.inputFileObj)) {
                     outputArgs = insertStrictAfterVideoCodec(outputArgs);
                 }
