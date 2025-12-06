@@ -255,6 +255,12 @@ var hasDolbyVisionStream = function (fileObj) {
             || sideHasDv;
     });
 };
+var hasDataStream = function (fileObj) {
+    var ffprobe = (fileObj && (fileObj.ffprobeData
+        || fileObj.ffProbeData
+        || (fileObj.meta && fileObj.meta.ffProbeData))) || { streams: [] };
+    return (ffprobe.streams || []).some(function (s) { return s && s.codec_type === 'data'; });
+};
 var insertStrictAfterVideoCodec = function (args) {
     if (args.includes('-strict')) {
         return args;
@@ -298,6 +304,10 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 inputArgs = __spreadArray([], args.variables.ffmpegCommand.overallInputArguments, true);
                 var removedStreams = streams.filter(function (s) { return s.removed; });
                 var hadRemovedDataStream = removedStreams.some(function (s) { return s.codec_type === 'data'; });
+                if (removedStreams.length > 0) {
+                    shouldProcess = true;
+                    args.variables.ffmpegCommand.shouldProcess = true;
+                }
                 streams = streams.filter(function (stream) {
                     if (stream.removed) {
                         shouldProcess = true;
