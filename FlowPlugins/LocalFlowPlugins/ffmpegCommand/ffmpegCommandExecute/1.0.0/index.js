@@ -302,6 +302,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     shouldProcess = true;
                 }
                 inputArgs = __spreadArray([], args.variables.ffmpegCommand.overallInputArguments, true);
+                console.log(streams);
                 var removedStreams = streams.filter(function (s) { return s.removed; });
                 var hadRemovedDataStream = removedStreams.some(function (s) { return s.codec_type === 'data'; });
                 if (removedStreams.length > 0) {
