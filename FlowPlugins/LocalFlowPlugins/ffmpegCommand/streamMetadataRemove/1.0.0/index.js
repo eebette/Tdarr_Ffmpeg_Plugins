@@ -213,11 +213,6 @@ var plugin = function (args) {
         };
     }
 
-    // Get metadata from input file to check which streams have metadata
-    var metaStreams = getStreams(args.inputFileObj);
-    var metaByIndex = new Map();
-    metaStreams.forEach(function (s) { metaByIndex.set(s.index, s); });
-
     var changed = false;
     var newStreams = streams.map(function (stream) {
         var shouldProcess = (stream.codec_type === "video" && removeVideoMetadata)
@@ -227,9 +222,9 @@ var plugin = function (args) {
             return stream;
         }
 
-        // Get metadata for this stream from the input file
-        var metaStream = metaByIndex.get(stream.index);
-        if (!metaStream || !hasExistingMetadata(metaStream, container)) {
+        // Check metadata on the current stream (from the processing flow state)
+        // Note: stream indices may differ from original input due to filtering/reordering
+        if (!hasExistingMetadata(stream, container)) {
             return stream;
         }
 
