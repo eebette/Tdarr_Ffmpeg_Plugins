@@ -34,7 +34,7 @@ var details = function () { return ({
             label: "Only update existing metadata",
             name: "onlyUpdateExisting",
             type: "boolean",
-            defaultValue: "false",
+            defaultValue: "true",
             inputUI: {
                 type: "switch",
             },
