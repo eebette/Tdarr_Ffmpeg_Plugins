@@ -299,27 +299,29 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 cliArgs.push('-y');
                 cliArgs.push('-i');
                 cliArgs.push(args.inputFileObj._id);
+                _a = args.variables.ffmpegCommand, shouldProcess = _a.shouldProcess, streams = _a.streams;
                 additionalInputs = args.variables.ffmpegCommand.additionalInputs || [];
                 additionalInputs.forEach(function (input) {
-                    shouldProcess = true;
+                    if (shouldProcess !== false) {
+                        shouldProcess = true;
+                    }
                     cliArgs.push('-i');
                     cliArgs.push(input);
                 });
-                _a = args.variables.ffmpegCommand, shouldProcess = _a.shouldProcess, streams = _a.streams;
                 streams = streams || [];
                 args.variables.ffmpegCommand.overallInputArguments = args.variables.ffmpegCommand.overallInputArguments || [];
-                if (args.variables.ffmpegCommand.overallInputArguments.length > 0) {
+                if (args.variables.ffmpegCommand.overallInputArguments.length > 0 && shouldProcess !== false) {
                     shouldProcess = true;
                 }
                 inputArgs = __spreadArray([], args.variables.ffmpegCommand.overallInputArguments, true);
                 var removedStreams = streams.filter(function (s) { return s.removed; });
                 var hadRemovedDataStream = removedStreams.some(function (s) { return s.codec_type === 'data'; });
-                if (removedStreams.length > 0) {
+                if (removedStreams.length > 0 && shouldProcess !== false) {
                     shouldProcess = true;
                     args.variables.ffmpegCommand.shouldProcess = true;
                 }
                 streams = streams.filter(function (stream) {
-                    if (stream.removed) {
+                    if (stream.removed && shouldProcess !== false) {
                         shouldProcess = true;
                     }
                     return !stream.removed;
@@ -330,10 +332,10 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 }
                 streams.forEach(function (stream) {
                     inputArgs.push.apply(inputArgs, stream.inputArgs || []);
-                    if ((stream.inputArgs || []).length > 0) {
+                    if ((stream.inputArgs || []).length > 0 && shouldProcess !== false) {
                         shouldProcess = true;
                     }
-                    if ((stream.outputArgs || []).length > 0) {
+                    if ((stream.outputArgs || []).length > 0 && shouldProcess !== false) {
                         shouldProcess = true;
                     }
                 });
@@ -355,7 +357,9 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 var negativeMapArgs = buildNegativeMapArgs(removedStreams);
                 if (negativeMapArgs.length > 0) {
                     outputArgs.push.apply(outputArgs, negativeMapArgs);
-                    shouldProcess = true;
+                    if (shouldProcess !== false) {
+                        shouldProcess = true;
+                    }
                 }
                 if (hadRemovedDataStream) {
                     // Guard against data streams sneaking back via implicit/default mapping.
@@ -371,7 +375,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 }
                 if (outputArgs.length > 0) {
                     cliArgs.push.apply(cliArgs, outputArgs);
-                    if (configuredOutputArgs.length > 0) {
+                    if (configuredOutputArgs.length > 0 && shouldProcess !== false) {
                         shouldProcess = true;
                     }
                 }
