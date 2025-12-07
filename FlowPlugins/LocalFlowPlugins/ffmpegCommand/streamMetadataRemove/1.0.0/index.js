@@ -125,7 +125,7 @@ var buildOverallOutputArgs = function (streams) {
         var replacedArgs = applyPlaceholders(stream.outputArgs || [], activeStreams, stream);
         var mapArgs = normalizeMapArgs(stream.mapArgs || [], activeStreams, stream);
         var normalizedArgs = normalizeCodecSelectors(replacedArgs, activeStreams, stream);
-        var hasCodecFlag = normalizedArgs.some(function (arg) { return /^-(?:c|codec)(?::[a-z]+(?::\\d+)?)?$/i.test(arg); });
+        var hasCodecFlag = normalizedArgs.some(function (arg) { return /^-(?:c|codec)(?::[a-z]+(?::\d+)?)?$/i.test(arg); });
         var outputArgsForStream = hasCodecFlag
             ? normalizedArgs
             : [getCodecSelectorForStream(activeStreams, stream), "copy"].concat(normalizedArgs);
