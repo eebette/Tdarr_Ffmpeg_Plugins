@@ -86,6 +86,7 @@ var plugin = function (args) {
             variables: args.variables,
         };
     }
+    // Track whether anything changed so we can rebuild mapping when needed.
     var metaByIndex = new Map();
     getStreams(args.inputFileObj).forEach(function (s) {
         metaByIndex.set(s.index, s);
@@ -106,19 +107,26 @@ var plugin = function (args) {
         var meta = metaByIndex.get(stream.index) || {};
         var lang = normalize(stream.language
             || (meta.tags && meta.tags.language)
-            || extractLanguageFromOutputArgs(stream.outputArgs || "")
+            || extractLanguageFromOutputArgs(stream.outputArgs || [])
             || "");
         var keep = languages.includes(lang);
         if (!keep) {
             changed = true;
             return Object.assign({}, stream, { removed: true });
         }
-        return stream;
+        // Preserve the original subtitle type index for correct -map after filtering.
+        var sourceTypeIndex = typeof stream.sourceTypeIndex === "number"
+            ? stream.sourceTypeIndex
+            : (typeof stream.typeIndex === "number" ? stream.typeIndex : meta.typeIndex);
+        return Object.assign({}, stream, { sourceTypeIndex: sourceTypeIndex });
     });
     if (changed) {
         var kept = filteredStreams.filter(function (s) { return !s.removed; });
         console.log("subtitleLanguageFilter: setting filtered streams", { streams: kept });
         args.variables.ffmpegCommand.streams = kept;
+        // Clear cached output args so downstream rebuilds maps from the filtered set.
+        args.variables.ffmpegCommand.overallOutputArguments = [];
+        args.variables.ffmpegCommand.overallOuputArguments = [];
         args.variables.ffmpegCommand.shouldProcess = true;
         args.variables.ffmpegCommand.init = true;
     }
