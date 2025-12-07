@@ -144,7 +144,7 @@ var buildTitle = function (stream) {
     var hdr = detectHdrLabel(stream);
     return "".concat(resolution, " ").concat(codec, " ").concat(hdr);
 };
-var setMetadataArg = function (outputArgs, title, stream, container, onlyUpdateExisting) {
+var setMetadataArg = function (outputArgs, title, metaStream, container, onlyUpdateExisting) {
     var isMkv = normalize(container) === "mkv";
     var metadataKey = isMkv ? "title" : "handler_name";
     var cleaned = [];
@@ -161,7 +161,7 @@ var setMetadataArg = function (outputArgs, title, stream, container, onlyUpdateE
         cleaned.push(arg);
     }
     // Fall back to stream tags when outputArgs are empty.
-    var tagValue = stream.tags ? (isMkv ? stream.tags.title : stream.tags.handler_name) : "";
+    var tagValue = metaStream.tags ? (isMkv ? metaStream.tags.title : metaStream.tags.handler_name) : "";
     // If onlyUpdateExisting is true and there's no existing metadata, skip
     if (onlyUpdateExisting && !existingValue && !tagValue) {
         return outputArgs;
@@ -286,7 +286,7 @@ var plugin = function (args) {
         }
         var metaStream = metaByIndex.get(stream.index) || meta[0];
         var title = buildTitle(metaStream);
-        var updatedArgs = setMetadataArg(stream.outputArgs || [], title, stream, container, onlyUpdateExisting);
+        var updatedArgs = setMetadataArg(stream.outputArgs || [], title, metaStream, container, onlyUpdateExisting);
         if ((stream.outputArgs || []).join("|") !== updatedArgs.join("|")) {
             changed = true;
         }

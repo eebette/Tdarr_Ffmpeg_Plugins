@@ -109,12 +109,16 @@ var streamsLikelyMatch = function (hdStream, candidate) {
         return false;
     }
     if (!compat) {
-        if (hdStream.channels && candidate.channels && hdStream.channels !== candidate.channels) {
+        // Allow fallback streams with same OR fewer channels (downmixing is expected)
+        if (hdStream.channels && candidate.channels && candidate.channels > hdStream.channels) {
             return false;
         }
+        // Don't enforce strict channel_layout matching - fallbacks are often downmixed
+        // If both layouts exist and are different, only reject if channels are identical
+        // (same channel count with different layout suggests they're different tracks)
         var hdLayout = normalize(hdStream.channel_layout || "");
         var candLayout = normalize(candidate.channel_layout || "");
-        if (hdLayout && candLayout && hdLayout !== candLayout) {
+        if (hdLayout && candLayout && hdLayout !== candLayout && hdStream.channels === candidate.channels) {
             return false;
         }
     }
