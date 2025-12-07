@@ -312,11 +312,8 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     shouldProcess = true;
                 }
                 inputArgs = __spreadArray([], args.variables.ffmpegCommand.overallInputArguments, true);
-                console.log(`305 ${shouldProcess}`);
                 var removedStreams = streams.filter(function (s) { return s.removed; });
-                console.log(removedStreams);
                 var hadRemovedDataStream = removedStreams.some(function (s) { return s.codec_type === 'data'; });
-                console.log(hadRemovedDataStream);
                 if (removedStreams.length > 0) {
                     shouldProcess = true;
                     args.variables.ffmpegCommand.shouldProcess = true;
@@ -327,8 +324,6 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     }
                     return !stream.removed;
                 });
-                console.log(`320 ${shouldProcess}`);
-                console.log(streams);
                 if (streams.length === 0) {
                     args.jobLog('No streams mapped for new file');
                     throw new Error('No streams mapped for new file');
@@ -388,7 +383,6 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     || "mkv").toLowerCase();
                 var requestedContainer = (args.variables.ffmpegCommand.container || inputExt).toLowerCase();
                 var containerChange = requestedContainer !== inputExt;
-                console.log(`373 ${shouldProcess}`);
                 if (!shouldProcess && !containerChange && additionalInputs.length === 0 && args.variables.ffmpegCommand.overallInputArguments.length === 0 && args.variables.ffmpegCommand.overallOutputArguments.length === 0) {
                     args.jobLog('No need to process file, already as required');
                     return [2 /*return*/, {
@@ -397,7 +391,6 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                             variables: args.variables,
                         }];
                 }
-                console.log(`382 ${shouldProcess}`);
                 if (!shouldProcess) {
                     args.jobLog('No need to process file, already as required');
                     return [2 /*return*/, {
