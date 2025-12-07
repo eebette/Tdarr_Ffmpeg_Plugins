@@ -38,7 +38,10 @@ Prereqs: `curl` or `wget`, and `tar` (standard on most distros).
 - `audioReorder/Reorder Audio Streams`: Reorders audio by codec and/or language preference (dropdown precedence), sets the first non-commentary track as default, and preserves other streams.
 
 ### Video
-- `videoCodecStandardize/Video: Standardize Codec Name`: Sets video stream titles like `1080p H264 SDR`, `4K HEVC HDR10`, or `4K HEVC Dolby Vision Profile 8.1 (HDR10)` based on resolution, codec, transfer, and Dolby Vision profile.
+- `videoCodecStandardize/Video: Standardize Codec Name`: Sets video stream titles like `1080p H264 SDR`, `4K HEVC HDR10`, or `4K HEVC Dolby Vision Profile 8.1 (HDR10)` based on resolution, codec, transfer, and Dolby Vision profile. Optional toggle to only update existing metadata (skips if title/handler_name not already set).
+
+### Metadata
+- `streamMetadataRemove/Stream Metadata: Remove Handler/Title`: Removes handler_name and title metadata from video and/or audio streams. Toggles for video and audio streams separately, only processes streams that have existing metadata.
 
 ### Subtitles
 - `subtitleExtractToSrt/Subtitles: Extract/OCR to SRT`: Extracts one subtitle per language and per type (main/commentary/forced), prefers text, OCRs PGS to SRT (using dotnet/PgsToSrt from DV tools), injects new SRTs as mapped subtitle streams, preserves originals, and avoids duplicate SRTs per language/type (temp files cleaned after mux).
