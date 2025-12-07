@@ -29,7 +29,18 @@ var details = function () { return ({
     requiresVersion: "2.11.01",
     sidebarPosition: 3,
     icon: "faAlignCenter",
-    inputs: [],
+    inputs: [
+        {
+            label: "Only update existing metadata",
+            name: "onlyUpdateExisting",
+            type: "boolean",
+            defaultValue: "false",
+            inputUI: {
+                type: "switch",
+            },
+            tooltip: "Only update title/handler_name if already set. Skip processing if metadata does not exist.",
+        },
+    ],
     outputs: [
         {
             number: 1,
@@ -133,7 +144,7 @@ var buildTitle = function (stream) {
     var hdr = detectHdrLabel(stream);
     return "".concat(resolution, " ").concat(codec, " ").concat(hdr);
 };
-var setMetadataArg = function (outputArgs, title, stream, container) {
+var setMetadataArg = function (outputArgs, title, stream, container, onlyUpdateExisting) {
     var isMkv = normalize(container) === "mkv";
     var metadataKey = isMkv ? "title" : "handler_name";
     var cleaned = [];
@@ -151,6 +162,10 @@ var setMetadataArg = function (outputArgs, title, stream, container) {
     }
     // Fall back to stream tags when outputArgs are empty.
     var tagValue = stream.tags ? (isMkv ? stream.tags.title : stream.tags.handler_name) : "";
+    // If onlyUpdateExisting is true and there's no existing metadata, skip
+    if (onlyUpdateExisting && !existingValue && !tagValue) {
+        return outputArgs;
+    }
     var metadataMatches = (existingValue || tagValue) === title;
     if (metadataMatches) {
         // Nothing to change.
@@ -263,6 +278,7 @@ var plugin = function (args) {
     }
     var metaByIndex = new Map();
     meta.forEach(function (s) { metaByIndex.set(s.index, s); });
+    var onlyUpdateExisting = inputs.onlyUpdateExisting === true || inputs.onlyUpdateExisting === "true";
     var changed = false;
     var newStreams = streams.map(function (stream) {
         if (stream.codec_type !== "video") {
@@ -270,7 +286,7 @@ var plugin = function (args) {
         }
         var metaStream = metaByIndex.get(stream.index) || meta[0];
         var title = buildTitle(metaStream);
-        var updatedArgs = setMetadataArg(stream.outputArgs || [], title, stream, container);
+        var updatedArgs = setMetadataArg(stream.outputArgs || [], title, stream, container, onlyUpdateExisting);
         if ((stream.outputArgs || []).join("|") !== updatedArgs.join("|")) {
             changed = true;
         }
