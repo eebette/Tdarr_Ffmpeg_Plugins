@@ -214,7 +214,7 @@ var plugin = function (args) {
         var meta = metaByIndex.get(stream.index) || {};
         var codec = normalize(stream.codec_name || meta.codec_name || "");
         if (mp4CompatibleCodecs.indexOf(codec) !== -1) {
-            // already mp4-compatible
+            // already mp4-compatible; skip conversion
             return stream;
         }
         if (textConvertibleCodecs.indexOf(codec) !== -1 || codec.length === 0) {
@@ -243,18 +243,28 @@ var plugin = function (args) {
             codec_name: "mov_text",
         });
     });
+    // Only deduplicate when we are genuinely dropping identical subtitle variants.
+    // Allow multiple mov_text tracks of the same language (e.g., SDH vs non-SDH) to coexist.
     var seen = new Set();
     updatedStreams = updatedStreams.map(function (stream) {
         if (stream.removed || stream.codec_type !== "subtitle") {
             return stream;
         }
         var meta = metaByIndex.get(stream.index) || {};
+        var codec = normalize(stream.codec_name || meta.codec_name || "");
+        if (mp4CompatibleCodecs.indexOf(codec) !== -1) {
+            return stream;
+        }
         var lang = normalize((stream.language
             || (meta.tags && meta.tags.language)
             || extractLanguageFromOutputArgs(stream.outputArgs || [])
             || ""));
         var typeLabel = detectTypeLabel(meta);
-        var key = "".concat(lang, "|").concat(typeLabel);
+        var title = normalize((meta.tags && (meta.tags.title || meta.tags.handler_name)) || "");
+        var key = "".concat(lang, "|").concat(typeLabel, "|").concat(title);
+        if (!lang && !title) {
+            return stream;
+        }
         if (seen.has(key)) {
             removals += 1;
             duplicateRemovals += 1;
