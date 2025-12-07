@@ -124,9 +124,9 @@ var plugin = function (args) {
         var kept = filteredStreams.filter(function (s) { return !s.removed; });
         console.log("subtitleLanguageFilter: setting filtered streams", { streams: kept });
         args.variables.ffmpegCommand.streams = kept;
-        // Clear cached output args so downstream rebuilds maps from the filtered set.
-        args.variables.ffmpegCommand.overallOutputArguments = [];
-        args.variables.ffmpegCommand.overallOuputArguments = [];
+        // Rebuild output arguments from the filtered stream set to keep maps/codec flags consistent.
+        var overallOutputArgs = buildOverallOutputArgs(kept);
+        args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
         args.variables.ffmpegCommand.shouldProcess = true;
         args.variables.ffmpegCommand.init = true;
     }

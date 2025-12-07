@@ -203,7 +203,10 @@ var normalizeMapArgs = function (mapArgs, streams, stream) {
     if (!selector) {
         return mapArgs;
     }
-    var mapTarget = "0:".concat(selector, ":").concat(getOutputStreamTypeIndex(streams, stream)).concat(selector === "v" ? "" : "?");
+    var sourceTypeIndex = typeof stream.sourceTypeIndex === "number"
+        ? stream.sourceTypeIndex
+        : getOutputStreamTypeIndex(streams, stream);
+    var mapTarget = "0:".concat(selector, ":").concat(sourceTypeIndex).concat(selector === "v" ? "" : "?");
     return mapArgs.map(function (arg, idx) {
         var isMapValue = idx > 0 && mapArgs[idx - 1] === "-map";
         if (isMapValue && /^\d+:\d+$/.test(arg)) {
@@ -284,7 +287,6 @@ var plugin = function (args) {
     });
     args.variables.ffmpegCommand.streams = newStreams;
     args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
-    args.variables.ffmpegCommand.overallOuputArguments = overallOutputArgs;
     args.variables.ffmpegCommand.shouldProcess = true;
     args.variables.ffmpegCommand.init = true;
     return {

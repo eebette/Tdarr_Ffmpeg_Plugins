@@ -345,10 +345,9 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 idx = cliArgs.indexOf('-i');
                 cliArgs.splice.apply(cliArgs, __spreadArray([idx, 0], inputArgs, false));
                 args.variables.ffmpegCommand.overallOutputArguments = args.variables.ffmpegCommand.overallOutputArguments || [];
-                args.variables.ffmpegCommand.overallOuputArguments = args.variables.ffmpegCommand.overallOuputArguments || [];
                 var configuredOutputArgs = args.variables.ffmpegCommand.overallOutputArguments.length > 0
                     ? __spreadArray([], args.variables.ffmpegCommand.overallOutputArguments, true)
-                    : __spreadArray([], args.variables.ffmpegCommand.overallOuputArguments, true);
+                    : [];
                 var configuredHasMaps = configuredOutputArgs.some(function (arg) { return arg === '-map'; });
                 var targetContainer = (args.variables.ffmpegCommand.container
                     || (args.inputFileObj && args.inputFileObj.container)
@@ -390,7 +389,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 var requestedContainer = (args.variables.ffmpegCommand.container || inputExt).toLowerCase();
                 var containerChange = requestedContainer !== inputExt;
                 console.log(`373 ${shouldProcess}`);
-                if (!shouldProcess && !containerChange && additionalInputs.length === 0 && args.variables.ffmpegCommand.overallInputArguments.length === 0 && args.variables.ffmpegCommand.overallOutputArguments.length === 0 && args.variables.ffmpegCommand.overallOuputArguments.length === 0) {
+                if (!shouldProcess && !containerChange && additionalInputs.length === 0 && args.variables.ffmpegCommand.overallInputArguments.length === 0 && args.variables.ffmpegCommand.overallOutputArguments.length === 0) {
                     args.jobLog('No need to process file, already as required');
                     return [2 /*return*/, {
                             outputFileObj: args.inputFileObj,

@@ -389,9 +389,7 @@ var plugin = function (args) {
     }
     var overallOutputArgs = buildOverallOutputArgs(outputStreams);
     // If the resulting mapping/args are identical to what we already had, skip processing.
-    var previousOutputArgs = args.variables.ffmpegCommand.overallOutputArguments
-        || args.variables.ffmpegCommand.overallOuputArguments
-        || [];
+    var previousOutputArgs = args.variables.ffmpegCommand.overallOutputArguments || [];
     var streamsEqual = outputStreams.length === originalStreams.length
         && outputStreams.every(function (s, idx) {
             var prev = originalStreams[idx];

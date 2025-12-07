@@ -403,7 +403,6 @@ var plugin = function (args) {
     args.variables.ffmpegCommand.streams = outputStreams;
     args.variables.ffmpegCommand.overallInputArguments = [];
     args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
-    args.variables.ffmpegCommand.overallOuputArguments = overallOutputArgs;
     args.variables.ffmpegCommand.shouldProcess = true;
     args.variables.ffmpegCommand.container = container;
     args.variables.ffmpegCommand.init = true;
