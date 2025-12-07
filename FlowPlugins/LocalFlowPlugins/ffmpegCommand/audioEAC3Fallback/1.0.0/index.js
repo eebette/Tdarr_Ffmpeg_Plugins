@@ -128,7 +128,8 @@ var streamsLikelyMatch = function (hdStream, candidate) {
 var getMapArgs = function (stream) {
     var selector = codecTypeSelector[stream.codec_type] || stream.codec_type || "";
     var typeIndex = typeof stream.typeIndex === "number" ? stream.typeIndex : 0;
-    return ["-map", "0:".concat(selector, ":").concat(typeIndex, "?")];
+    var optional = (selector === "v" || selector === "t") ? "" : "?";
+    return ["-map", "0:".concat(selector, ":").concat(typeIndex).concat(optional)];
 };
 var getOutputStreamIndex = function (streams, stream) {
     var filtered = streams.filter(function (s) { return !s.removed; });
@@ -175,7 +176,7 @@ var normalizeMapArgs = function (mapArgs, streams, stream) {
     var sourceTypeIndex = typeof stream.sourceTypeIndex === "number"
         ? stream.sourceTypeIndex
         : getOutputStreamTypeIndex(streams, stream);
-    var mapTarget = "0:".concat(selector, ":").concat(sourceTypeIndex).concat(selector === "v" ? "" : "?");
+    var mapTarget = "0:".concat(selector, ":").concat(sourceTypeIndex).concat(selector === "v" || selector === "t" ? "" : "?");
     return mapArgs.map(function (arg, idx) {
         var isMapValue = idx > 0 && mapArgs[idx - 1] === "-map";
         if (isMapValue && /^\d+:\d+$/.test(arg)) {

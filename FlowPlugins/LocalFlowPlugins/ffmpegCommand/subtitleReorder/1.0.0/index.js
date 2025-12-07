@@ -57,7 +57,8 @@ var isCommentary = function (stream) {
 var getMapArgs = function (stream) {
     var selector = codecTypeSelector[stream.codec_type] || stream.codec_type || "";
     var typeIndex = typeof stream.typeIndex === "number" ? stream.typeIndex : 0;
-    return ["-map", "0:".concat(selector, ":").concat(typeIndex, "?")];
+    var optional = (selector === "v" || selector === "t") ? "" : "?";
+    return ["-map", "0:".concat(selector, ":").concat(typeIndex).concat(optional)];
 };
 var updateDisposition = function (outputArgs, makeDefault, makeForced) {
     var cleaned = [];

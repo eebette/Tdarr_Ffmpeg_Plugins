@@ -127,7 +127,7 @@ var normalizeMapArgs = function (mapArgs, streams, stream) {
     if (!typeSelector) {
         return mapArgs;
     }
-    var mapTarget = "0:".concat(typeSelector, ":").concat(getOuputStreamTypeIndex(streams, stream)).concat(typeSelector === 'v' ? '' : '?');
+    var mapTarget = "0:".concat(typeSelector, ":").concat(getOuputStreamTypeIndex(streams, stream)).concat(typeSelector === 'v' || typeSelector === 't' ? '' : '?');
     return mapArgs.map(function (arg, idx) {
         var isMapValue = idx > 0 && mapArgs[idx - 1] === '-map';
         if (isMapValue && /^\d+:\d+$/.test(arg)) {

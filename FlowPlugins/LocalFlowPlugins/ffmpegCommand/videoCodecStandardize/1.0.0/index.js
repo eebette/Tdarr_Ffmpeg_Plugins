@@ -1,5 +1,12 @@
 "use strict";
 var flowUtils = require("../../../../FlowHelpers/1.0.0/interfaces/flowUtils");
+var codecTypeSelector = {
+    video: "v",
+    audio: "a",
+    subtitle: "s",
+    data: "d",
+    attachment: "t",
+};
 var normalize = function (value) { return (value || "").toString().toLowerCase(); };
 var normalizeInputs = function (inputs) {
     if (Array.isArray(inputs)) {
@@ -165,7 +172,7 @@ var getOutputStreamTypeIndex = function (streams, stream) {
     return position === -1 ? 0 : position;
 };
 var getCodecSelectorForStream = function (streams, stream) {
-    var selector = stream.codec_type === "video" ? "v" : (stream.codec_type === "audio" ? "a" : (stream.codec_type === "subtitle" ? "s" : stream.codec_type || ""));
+    var selector = codecTypeSelector[stream.codec_type] || stream.codec_type || "";
     if (!selector || selector.length !== 1) {
         return "-c:".concat(getOutputStreamIndex(streams, stream));
     }
@@ -199,14 +206,14 @@ var normalizeCodecSelectors = function (outputArgs, streams, stream) {
     });
 };
 var normalizeMapArgs = function (mapArgs, streams, stream) {
-    var selector = stream.codec_type === "video" ? "v" : (stream.codec_type === "audio" ? "a" : (stream.codec_type === "subtitle" ? "s" : stream.codec_type || ""));
+    var selector = codecTypeSelector[stream.codec_type] || stream.codec_type || "";
     if (!selector) {
         return mapArgs;
     }
     var sourceTypeIndex = typeof stream.sourceTypeIndex === "number"
         ? stream.sourceTypeIndex
         : getOutputStreamTypeIndex(streams, stream);
-    var mapTarget = "0:".concat(selector, ":").concat(sourceTypeIndex).concat(selector === "v" ? "" : "?");
+    var mapTarget = "0:".concat(selector, ":").concat(sourceTypeIndex).concat(selector === "v" || selector === "t" ? "" : "?");
     return mapArgs.map(function (arg, idx) {
         var isMapValue = idx > 0 && mapArgs[idx - 1] === "-map";
         if (isMapValue && /^\d+:\d+$/.test(arg)) {
