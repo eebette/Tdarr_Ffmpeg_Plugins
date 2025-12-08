@@ -249,7 +249,7 @@ var plugin = function (args) {
         reordered.push(Object.assign({}, item.stream, {
             mapArgs: item.stream.mapArgs || getMapArgs(item.stream),
             outputArgs: updatedOutputArgs,
-            sourceTypeIndex: item.stream.sourceTypeIndex,
+            sourceTypeIndex: typeof item.stream.sourceTypeIndex === "number" ? item.stream.sourceTypeIndex : item.originalIndex,
         }));
     });
     // Reinsert reordered subtitle streams back into their original subtitle slot positions

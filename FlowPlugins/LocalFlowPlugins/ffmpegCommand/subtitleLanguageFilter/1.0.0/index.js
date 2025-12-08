@@ -106,6 +106,7 @@ var plugin = function (args) {
         }
         var meta = metaByIndex.get(stream.index) || {};
         var lang = normalize(stream.language
+            || (stream.tags && stream.tags.language)
             || (meta.tags && meta.tags.language)
             || extractLanguageFromOutputArgs(stream.outputArgs || [])
             || "");
