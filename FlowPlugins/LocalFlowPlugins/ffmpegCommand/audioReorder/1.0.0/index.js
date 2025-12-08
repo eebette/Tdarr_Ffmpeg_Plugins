@@ -368,7 +368,7 @@ var plugin = function (args) {
             // Preserve original mapping (which may include a specific sourceTypeIndex).
             mapArgs: item.stream.mapArgs || getMapArgs(item.stream),
             outputArgs: updatedOutputArgs,
-            sourceTypeIndex: item.stream.sourceTypeIndex,
+            sourceTypeIndex: typeof item.stream.sourceTypeIndex === "number" ? item.stream.sourceTypeIndex : item.stream.typeIndex,
         }));
     });
     // Reinsert reordered audio streams back into their original audio slot positions
