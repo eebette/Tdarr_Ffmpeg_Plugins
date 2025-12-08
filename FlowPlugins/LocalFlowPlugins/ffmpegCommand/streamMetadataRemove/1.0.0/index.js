@@ -44,7 +44,7 @@ var details = function () { return ({
             label: "Remove audio stream metadata",
             name: "removeAudioMetadata",
             type: "boolean",
-            defaultValue: "false",
+            defaultValue: "true",
             inputUI: {
                 type: "switch",
             },
