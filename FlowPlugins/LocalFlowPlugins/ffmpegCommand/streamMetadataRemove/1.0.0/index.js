@@ -222,9 +222,20 @@ var plugin = function (args) {
             return stream;
         }
 
+        // Debug: log what tags exist for this stream
+        console.log("streamMetadataRemove: checking stream", {
+            index: stream.index,
+            codec_type: stream.codec_type,
+            tags: stream.tags,
+            hasTags: !!stream.tags,
+            hasTitle: !!(stream.tags && stream.tags.title),
+            hasHandlerName: !!(stream.tags && stream.tags.handler_name)
+        });
+
         // Check metadata on the current stream (from the processing flow state)
         // Note: stream indices may differ from original input due to filtering/reordering
         if (!hasExistingMetadata(stream, container)) {
+            console.log("streamMetadataRemove: no existing metadata for stream", stream.index);
             return stream;
         }
 
