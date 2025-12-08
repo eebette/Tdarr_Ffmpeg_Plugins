@@ -218,19 +218,17 @@ var plugin = function (args) {
         var shouldProcess = (stream.codec_type === "video" && removeVideoMetadata)
             || (stream.codec_type === "audio" && removeAudioMetadata);
 
+        // Debug: log ALL streams
+        console.log("streamMetadataRemove: processing stream", {
+            index: stream.index,
+            codec_type: stream.codec_type,
+            shouldProcess: shouldProcess,
+            tags: stream.tags
+        });
+
         if (!shouldProcess) {
             return stream;
         }
-
-        // Debug: log what tags exist for this stream
-        console.log("streamMetadataRemove: checking stream", {
-            index: stream.index,
-            codec_type: stream.codec_type,
-            tags: stream.tags,
-            hasTags: !!stream.tags,
-            hasTitle: !!(stream.tags && stream.tags.title),
-            hasHandlerName: !!(stream.tags && stream.tags.handler_name)
-        });
 
         // Check metadata on the current stream (from the processing flow state)
         // Note: stream indices may differ from original input due to filtering/reordering
