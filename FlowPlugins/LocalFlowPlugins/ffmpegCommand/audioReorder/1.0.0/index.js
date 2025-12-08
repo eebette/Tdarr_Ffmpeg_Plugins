@@ -93,17 +93,20 @@ var parseDisposition = function (outputArgs) {
 };
 var updateDisposition = function (outputArgs, makeDefault) {
     var cleaned = [];
+    var hasDisposition = false;
     for (var i = 0; i < outputArgs.length; i += 1) {
         var arg = outputArgs[i];
         if (/^-disposition:a/.test(arg)) {
+            hasDisposition = true;
             i += 1;
             continue;
         }
         cleaned.push(arg);
     }
-    cleaned.push("-disposition:a:{outputTypeIndex}");
-    cleaned.push(makeDefault ? "default" : "0");
-    return cleaned;
+    // Only add disposition args at the beginning if we're changing them
+    // This ensures other plugin args (like metadata) are preserved at the end
+    var dispositionArgs = ["-disposition:a:{outputTypeIndex}", makeDefault ? "default" : "0"];
+    return dispositionArgs.concat(cleaned);
 };
 var getOutputStreamIndex = function (streams, stream) {
     var filtered = streams.filter(function (s) { return !s.removed; });

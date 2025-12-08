@@ -180,8 +180,26 @@ var getStreams = function (fileObj) {
 };
 var hasExistingMetadata = function (stream, container) {
     var tags = stream.tags || {};
-    // Check if any metadata exists
-    return Boolean(tags.title || tags.handler_name);
+
+    // Check for title metadata
+    if (tags.title) {
+        return true;
+    }
+
+    // For MP4/MOV files, ignore default FFmpeg handler names
+    // These are automatically added by the muxer and can't be removed
+    if (tags.handler_name) {
+        var handlerName = tags.handler_name.toLowerCase();
+        var isDefaultHandler = handlerName === 'videohandler'
+            || handlerName === 'soundhandler'
+            || handlerName === 'subtitlehandler';
+
+        if (!isDefaultHandler) {
+            return true;
+        }
+    }
+
+    return false;
 };
 var plugin = function (args) {
     var lib = require("../../../../../methods/lib")();
