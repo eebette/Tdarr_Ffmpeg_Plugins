@@ -60,6 +60,86 @@ var getMapArgs = function (stream) {
     var optional = (selector === "v" || selector === "t") ? "" : "?";
     return ["-map", "0:".concat(selector, ":").concat(typeIndex).concat(optional)];
 };
+var getOutputStreamIndex = function (streams, stream) {
+    var filtered = streams.filter(function (s) { return !s.removed; });
+    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
+    return position === -1 ? 0 : position;
+};
+var getOutputStreamTypeIndex = function (streams, stream) {
+    var filtered = streams.filter(function (s) { return !s.removed && s.codec_type === stream.codec_type; });
+    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
+    return position === -1 ? 0 : position;
+};
+var getCodecSelectorForStream = function (streams, stream) {
+    var selector = codecTypeSelector[stream.codec_type] || stream.codec_type || "";
+    if (!selector || selector.length !== 1) {
+        var filtered = streams.filter(function (s) { return !s.removed; });
+        var position = filtered.findIndex(function (s) { return s.index === stream.index; });
+        return "-c:".concat(position === -1 ? 0 : position);
+    }
+    return "-c:".concat(selector, ":").concat(getOutputStreamTypeIndex(streams, stream));
+};
+var applyPlaceholders = function (args, streams, stream) {
+    return args.map(function (arg) {
+        var updated = arg;
+        if (updated.includes("{outputIndex}")) {
+            var filtered = streams.filter(function (s) { return !s.removed; });
+            var position = filtered.findIndex(function (s) { return s.index === stream.index; });
+            updated = updated.replace("{outputIndex}", String(position === -1 ? 0 : position));
+        }
+        if (updated.includes("{outputTypeIndex}")) {
+            updated = updated.replace("{outputTypeIndex}", String(getOutputStreamTypeIndex(streams, stream)));
+        }
+        return updated;
+    });
+};
+var normalizeCodecSelectors = function (outputArgs, streams, stream) {
+    var codecSelector = getCodecSelectorForStream(streams, stream);
+    return outputArgs.map(function (arg) {
+        if (/^-c:[a-z]+$/.test(arg)) {
+            return codecSelector;
+        }
+        if (/^-c:\d+$/.test(arg)) {
+            return codecSelector;
+        }
+        if (/^-c:[a-z]+:\d+$/.test(arg)) {
+            return codecSelector;
+        }
+        return arg;
+    });
+};
+var normalizeMapArgs = function (mapArgs, streams, stream) {
+    var selector = codecTypeSelector[stream.codec_type] || stream.codec_type || "";
+    if (!selector) {
+        return mapArgs;
+    }
+    var sourceTypeIndex = typeof stream.sourceTypeIndex === "number"
+        ? stream.sourceTypeIndex
+        : getOutputStreamTypeIndex(streams, stream);
+    var mapTarget = "0:".concat(selector, ":").concat(sourceTypeIndex).concat(selector === "v" || selector === "t" ? "" : "?");
+    return mapArgs.map(function (arg, idx) {
+        var isMapValue = idx > 0 && mapArgs[idx - 1] === "-map";
+        if (isMapValue && /^\d+:\d+$/.test(arg)) {
+            return mapTarget;
+        }
+        return arg;
+    });
+};
+var buildOverallOutputArgs = function (streams) {
+    var activeStreams = (streams || []).filter(function (s) { return !s.removed; });
+    return activeStreams.reduce(function (acc, stream) {
+        var replacedArgs = applyPlaceholders(stream.outputArgs || [], activeStreams, stream);
+        var mapArgs = normalizeMapArgs(stream.mapArgs || [], activeStreams, stream);
+        var normalizedArgs = normalizeCodecSelectors(replacedArgs, activeStreams, stream);
+        var hasCodecFlag = normalizedArgs.some(function (arg) { return /^-(?:c|codec)(?::[a-z]+(?::\d+)?)?$/i.test(arg); });
+        var outputArgsForStream = hasCodecFlag
+            ? normalizedArgs
+            : [getCodecSelectorForStream(activeStreams, stream), "copy"].concat(normalizedArgs);
+        acc.push.apply(acc, mapArgs);
+        acc.push.apply(acc, outputArgsForStream);
+        return acc;
+    }, []);
+};
 var updateDisposition = function (outputArgs, makeDefault, makeForced) {
     var cleaned = [];
     for (var i = 0; i < outputArgs.length; i += 1) {
@@ -272,8 +352,10 @@ var plugin = function (args) {
             variables: args.variables,
         };
     }
-    console.log("subtitleReorder: setting reordered streams", { streams: outputStreams });
+    var overallOutputArgs = buildOverallOutputArgs(outputStreams);
+    console.log("subtitleReorder: setting reordered streams", { streams: outputStreams, overallOutputArgs: overallOutputArgs });
     args.variables.ffmpegCommand.streams = outputStreams;
+    args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
     args.variables.ffmpegCommand.shouldProcess = true;
     args.variables.ffmpegCommand.init = true;
     return {

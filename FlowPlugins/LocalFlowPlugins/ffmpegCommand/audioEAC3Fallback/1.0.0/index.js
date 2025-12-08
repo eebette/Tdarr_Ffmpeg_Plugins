@@ -297,11 +297,40 @@ var plugin = function (args) {
     var inputs = lib.loadDefaultValues(normalizeInputs(args.inputs), details);
     args.inputs = inputs;
     flowUtils.checkFfmpegCommandInit(args);
-    var allStreams = getStreams(args.inputFileObj);
-    var videoStreams = allStreams.filter(function (s) { return s.codec_type === "video"; });
-    var subtitleStreams = allStreams.filter(function (s) { return s.codec_type === "subtitle"; });
-    var attachmentStreams = allStreams.filter(function (s) { return s.codec_type === "attachment" || s.codec_type === "data"; });
-    var audioStreams = allStreams.filter(function (s) { return s.codec_type === "audio"; });
+
+    // Check if we have existing flow state from previous plugins
+    var useFlowState = args.variables.ffmpegCommand.streams
+        && Array.isArray(args.variables.ffmpegCommand.streams)
+        && args.variables.ffmpegCommand.streams.length > 0;
+
+    // Get original metadata for all streams (needed for codec detection)
+    var allMetaStreams = getStreams(args.inputFileObj);
+    var metaByIndex = new Map();
+    allMetaStreams.forEach(function (stream) {
+        metaByIndex.set(stream.index, stream);
+    });
+
+    var videoStreams, audioStreams, subtitleStreams, attachmentStreams;
+
+    if (useFlowState) {
+        // Read from flow state - this respects previous plugin modifications
+        var flowStreams = args.variables.ffmpegCommand.streams;
+        videoStreams = flowStreams.filter(function (s) { return s.codec_type === "video" && !s.removed; });
+        audioStreams = flowStreams.filter(function (s) { return s.codec_type === "audio" && !s.removed; });
+        subtitleStreams = flowStreams.filter(function (s) { return s.codec_type === "subtitle" && !s.removed; });
+        attachmentStreams = flowStreams.filter(function (s) {
+            return (s.codec_type === "attachment" || s.codec_type === "data") && !s.removed;
+        });
+    } else {
+        // Fall back to reading from original file
+        videoStreams = allMetaStreams.filter(function (s) { return s.codec_type === "video"; });
+        audioStreams = allMetaStreams.filter(function (s) { return s.codec_type === "audio"; });
+        subtitleStreams = allMetaStreams.filter(function (s) { return s.codec_type === "subtitle"; });
+        attachmentStreams = allMetaStreams.filter(function (s) {
+            return s.codec_type === "attachment" || s.codec_type === "data";
+        });
+    }
+
     if (audioStreams.length === 0) {
         args.jobLog("File has no audio streams; skipping.");
         args.variables.ffmpegCommand.shouldProcess = false;
@@ -311,21 +340,39 @@ var plugin = function (args) {
             variables: args.variables,
         };
     }
-    var hdStreams = audioStreams.filter(isHdAudio);
-    var fallbackStreams = audioStreams.filter(isFallbackAudio);
+
+    // Identify HD audio streams - use original metadata for codec detection
+    var hdStreams = audioStreams.filter(function (stream) {
+        var meta = metaByIndex.get(stream.index) || stream;
+        return isHdAudio(meta);
+    });
+
+    var fallbackStreams = audioStreams.filter(function (stream) {
+        var meta = metaByIndex.get(stream.index) || stream;
+        return isFallbackAudio(meta);
+    });
+
+    // Match HD streams with existing fallbacks
     var matches = new Map();
     var usedEac3 = new Set();
     hdStreams.forEach(function (stream) {
+        var hdMeta = metaByIndex.get(stream.index) || stream;
         var match = fallbackStreams.find(function (candidate) {
-            return !usedEac3.has(candidate.index) && streamsLikelyMatch(stream, candidate);
+            if (usedEac3.has(candidate.index)) {
+                return false;
+            }
+            var candidateMeta = metaByIndex.get(candidate.index) || candidate;
+            return streamsLikelyMatch(hdMeta, candidateMeta);
         });
         if (match) {
             matches.set(stream.index, match);
             usedEac3.add(match.index);
         }
     });
+
     var conversions = hdStreams.filter(function (stream) { return !matches.has(stream.index); });
     var shouldProcess = conversions.length > 0;
+
     if (!shouldProcess) {
         args.jobLog("Audio already has suitable fallback; no changes needed.");
         console.log("audioEAC3Fallback: no-change (existing fallback present)");
@@ -336,88 +383,154 @@ var plugin = function (args) {
             variables: args.variables,
         };
     }
+
     var outputStreams = [];
+
+    // Preserve video streams from flow state (or original file)
     videoStreams.forEach(function (stream) {
-        outputStreams.push({
-            index: stream.index,
-            codec_type: "video",
-            mapArgs: getMapArgs(stream),
-            outputArgs: makeCopyArgs(stream, false),
-            inputArgs: [],
-            typeIndex: typeof stream.typeIndex === "number" ? stream.typeIndex : undefined,
-            removed: false,
-        });
+        if (useFlowState) {
+            // Keep existing stream with all modifications
+            outputStreams.push(stream);
+        } else {
+            // Build new stream entry
+            outputStreams.push({
+                index: stream.index,
+                codec_type: "video",
+                mapArgs: getMapArgs(stream),
+                outputArgs: makeCopyArgs(stream, false),
+                inputArgs: [],
+                typeIndex: typeof stream.typeIndex === "number" ? stream.typeIndex : undefined,
+                removed: false,
+            });
+        }
     });
+
+    // Build audio plan based on HD streams and needed conversions
     var audioPlan = buildAudioPlan(audioStreams, hdStreams, matches, conversions);
+
     audioPlan.forEach(function (entry) {
-        var outputArgs = entry.action === "transcode"
-            ? makeEac3Args(entry.source, false)
-            : makeCopyArgs(entry.source, false);
-        // Minimal metadata needed for downstream ordering/default logic.
-        var tags = entry.source.tags || {};
-        outputStreams.push({
-            index: entry.id,
-            codec_type: "audio",
-            codec_name: entry.action === "transcode" ? "eac3" : entry.source.codec_name,
-            channels: entry.source.channels,
-            channel_layout: entry.source.channel_layout,
-            tags: {
-                language: tags.language,
-                title: tags.title,
-                handler_name: tags.handler_name,
-                BPS: tags.BPS,
-            },
-            mapArgs: getMapArgs(entry.source),
-            outputArgs: outputArgs,
-            inputArgs: [],
-            sourceTypeIndex: typeof entry.source.typeIndex === "number" ? entry.source.typeIndex : undefined,
-            typeIndex: typeof entry.source.typeIndex === "number" ? entry.source.typeIndex : undefined,
-            removed: false,
-        });
+        var sourceMeta = metaByIndex.get(entry.source.index) || entry.source;
+
+        if (entry.action === "transcode") {
+            // Create new EAC3 stream
+            var tags = sourceMeta.tags || {};
+            outputStreams.push({
+                index: entry.id,
+                codec_type: "audio",
+                codec_name: "eac3",
+                channels: sourceMeta.channels,
+                channel_layout: sourceMeta.channel_layout,
+                tags: {
+                    language: tags.language,
+                    title: tags.title,
+                    handler_name: tags.handler_name,
+                    BPS: tags.BPS,
+                },
+                mapArgs: getMapArgs(sourceMeta),
+                outputArgs: makeEac3Args(sourceMeta, false),
+                inputArgs: [],
+                sourceTypeIndex: typeof sourceMeta.typeIndex === "number" ? sourceMeta.typeIndex : undefined,
+                typeIndex: typeof sourceMeta.typeIndex === "number" ? sourceMeta.typeIndex : undefined,
+                removed: false,
+            });
+        } else {
+            // Copy existing stream
+            if (useFlowState) {
+                // Keep existing stream with all modifications from previous plugins
+                outputStreams.push(entry.source);
+            } else {
+                // Build new stream entry
+                var tags = sourceMeta.tags || {};
+                outputStreams.push({
+                    index: entry.source.index,
+                    codec_type: "audio",
+                    codec_name: sourceMeta.codec_name,
+                    channels: sourceMeta.channels,
+                    channel_layout: sourceMeta.channel_layout,
+                    tags: {
+                        language: tags.language,
+                        title: tags.title,
+                        handler_name: tags.handler_name,
+                        BPS: tags.BPS,
+                    },
+                    mapArgs: entry.source.mapArgs || getMapArgs(sourceMeta),
+                    outputArgs: entry.source.outputArgs || makeCopyArgs(entry.source, false),
+                    inputArgs: [],
+                    sourceTypeIndex: typeof entry.source.sourceTypeIndex === "number"
+                        ? entry.source.sourceTypeIndex
+                        : (typeof sourceMeta.typeIndex === "number" ? sourceMeta.typeIndex : undefined),
+                    typeIndex: typeof sourceMeta.typeIndex === "number" ? sourceMeta.typeIndex : undefined,
+                    removed: false,
+                });
+            }
+        }
     });
+
+    // Preserve subtitle streams from flow state (or original file)
     subtitleStreams.forEach(function (stream) {
-        outputStreams.push({
-            index: stream.index,
-            codec_type: "subtitle",
-            mapArgs: getMapArgs(stream),
-            outputArgs: makeCopyArgs(stream, false),
-            inputArgs: [],
-            typeIndex: typeof stream.typeIndex === "number" ? stream.typeIndex : undefined,
-            removed: false,
-        });
+        if (useFlowState) {
+            // Keep existing stream with all modifications
+            outputStreams.push(stream);
+        } else {
+            // Build new stream entry
+            outputStreams.push({
+                index: stream.index,
+                codec_type: "subtitle",
+                mapArgs: getMapArgs(stream),
+                outputArgs: makeCopyArgs(stream, false),
+                inputArgs: [],
+                typeIndex: typeof stream.typeIndex === "number" ? stream.typeIndex : undefined,
+                removed: false,
+            });
+        }
     });
+
+    // Preserve attachment streams from flow state (or original file)
     attachmentStreams.forEach(function (stream) {
-        outputStreams.push({
-            index: stream.index,
-            codec_type: stream.codec_type,
-            mapArgs: getMapArgs(stream),
-            outputArgs: makeCopyArgs(stream, false),
-            inputArgs: [],
-            typeIndex: typeof stream.typeIndex === "number" ? stream.typeIndex : undefined,
-            removed: false,
-        });
+        if (useFlowState) {
+            // Keep existing stream with all modifications
+            outputStreams.push(stream);
+        } else {
+            // Build new stream entry
+            outputStreams.push({
+                index: stream.index,
+                codec_type: stream.codec_type,
+                mapArgs: getMapArgs(stream),
+                outputArgs: makeCopyArgs(stream, false),
+                inputArgs: [],
+                typeIndex: typeof stream.typeIndex === "number" ? stream.typeIndex : undefined,
+                removed: false,
+            });
+        }
     });
+
     var extension = path.extname(args.inputFileObj._id || "").replace(".", "");
     // Respect an already chosen container; otherwise fall back to the input's container/extension.
     var container = args.variables.ffmpegCommand.container
         || args.inputFileObj.container
         || extension
         || "mkv";
+
     var overallOutputArgs = buildOverallOutputArgs(outputStreams);
+
     console.log("audioEAC3Fallback: setting streams/args", {
+        useFlowState: useFlowState,
         streams: outputStreams,
         overallOutputArgs: overallOutputArgs,
     });
+
     args.variables.ffmpegCommand.streams = outputStreams;
     args.variables.ffmpegCommand.overallInputArguments = [];
     args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
     args.variables.ffmpegCommand.shouldProcess = true;
     args.variables.ffmpegCommand.container = container;
     args.variables.ffmpegCommand.init = true;
+
     args.jobLog(JSON.stringify({
         matches: Array.from(matches.values()).map(function (stream) { return stream.index; }),
         conversions: conversions.map(function (stream) { return stream.index; }),
     }));
+
     return {
         outputFileObj: args.inputFileObj,
         outputNumber: 1,
