@@ -192,6 +192,13 @@ var plugin = function (args) {
     var removeVideoMetadata = inputs.removeVideoMetadata === true || inputs.removeVideoMetadata === "true";
     var removeAudioMetadata = inputs.removeAudioMetadata === true || inputs.removeAudioMetadata === "true";
 
+    console.log("streamMetadataRemove: input config", {
+        removeVideoMetadataRaw: inputs.removeVideoMetadata,
+        removeAudioMetadataRaw: inputs.removeAudioMetadata,
+        removeVideoMetadata: removeVideoMetadata,
+        removeAudioMetadata: removeAudioMetadata
+    });
+
     if (!removeVideoMetadata && !removeAudioMetadata) {
         args.jobLog("No metadata removal requested.");
         return {
