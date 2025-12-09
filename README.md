@@ -44,14 +44,15 @@ Prereqs: `curl` or `wget`, and `tar` (standard on most distros).
 - `streamMetadataRemove/Stream Metadata: Remove Handler/Title`: Removes handler_name and title metadata from video and/or audio streams. Toggles for video and audio streams separately, only processes streams that have existing metadata.
 
 ### Subtitles
-- `subtitleExtractToSrt/Subtitles: Extract/OCR to SRT`: Extracts one subtitle per language and per type (main/commentary/forced), prefers text, OCRs PGS to SRT (using dotnet/PgsToSrt from DV tools), injects new SRTs as mapped subtitle streams, preserves originals, and avoids duplicate SRTs per language/type (temp files cleaned after mux).
+- `subtitleExtractToSrt/Subtitles: Extract/OCR to SRT`: Extracts one subtitle per language and per type (main/commentary/forced), prefers text, OCRs PGS to SRT (using dotnet/PgsToSrt), injects new SRTs as mapped subtitle streams, preserves originals, and avoids duplicate SRTs per language/type (temp files cleaned after mux).
 - `subtitleFixEnglish/Subtitles: Fix English OCR`: Cleans English SRTs generated upstream (OCR typos and spacing) before muxing.
 - `subtitleLanguageFilter/Filter Subtitles by Language`: Removes subtitle streams not matching a user-provided comma-separated language list, reading language from metadata or stream outputs.
+- `subtitleDeduplicate/Deduplicate Subtitles`: Removes duplicate subtitle streams based on language, codec type, and title/handler_name combination. Prefers streams with default disposition, otherwise keeps first occurrence. For MP4 containers, normalizes empty/null/"SubtitleHandler" handler names as equivalent.
 - `subtitleConvertToMovText/Subtitles: Convert to mov_text (MP4)`: Converts mapped text subtitles (e.g., SRT/ASS) to mov_text/tx3g so MP4 muxing succeeds and drops image-based subtitles MP4 cannot store.
 - `subtitleReorder/Reorder Subtitles`: Reorders subtitle streams by codec and/or language preference (dropdown precedence), keeps the first non-commentary as default, and preserves forced flags.
 
 ### Recommended subtitle flow
-Run DV tools install (for dotnet/PgsToSrt) → `Subtitles: Extract/OCR to SRT` → `Subtitles: Fix English OCR` → `Filter Subtitles by Language` (optional) → `subtitleReorder/Reorder Subtitles` (optional) → `ffmpegCommand/Execute`.
+`Subtitles: Extract/OCR to SRT` → `Subtitles: Fix English OCR` → `Filter Subtitles by Language` (optional) → `Deduplicate Subtitles` (optional) → `Reorder Subtitles` (optional) → `ffmpegCommand/Execute`.
 
 ## Typical flow examples 🔄
 - Pre-flight node to choose codecs/filters → build `variables.ffmpegCommand.streams` with map/output args → `ffmpegCommand/Execute` to transcode or remux.
