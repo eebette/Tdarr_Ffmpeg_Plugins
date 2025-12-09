@@ -201,7 +201,7 @@ var plugin = function (args) {
             || (stream.tags && stream.tags.language)
             || (meta.tags && meta.tags.language)
             || "");
-        var codec = normalize(meta.codec_name || stream.codec_name || "");
+        var codec = normalize(stream.codec_name || meta.codec_name || "");
         var distinguishingName = getDistinguishingName(stream, meta, format);
         var key = [lang, codec, distinguishingName].join("|");
         if (!groups.has(key)) {
