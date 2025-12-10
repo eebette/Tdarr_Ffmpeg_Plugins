@@ -8,15 +8,6 @@ var codecTypeSelector = {
     attachment: "t",
 };
 var normalize = function (value) { return (value || "").toString().toLowerCase(); };
-var normalizeInputs = function (inputs) {
-    if (Array.isArray(inputs)) {
-        return inputs;
-    }
-    if (inputs && typeof inputs === "object") {
-        return Object.keys(inputs).map(function (key) { return ({ name: key, value: inputs[key] }); });
-    }
-    return [];
-};
 var details = function () { return ({
     name: "Stream Metadata: Remove Handler/Title",
     description: "Removes handler_name and title metadata from video and/or audio streams.",
@@ -203,12 +194,12 @@ var hasExistingMetadata = function (stream, container) {
 };
 var plugin = function (args) {
     var lib = require("../../../../../methods/lib")();
-    var inputs = lib.loadDefaultValues(normalizeInputs(args.inputs), details);
+    var inputs = lib.loadDefaultValues(args.inputs, details);
     args.inputs = inputs;
     flowUtils.checkFfmpegCommandInit(args);
 
-    var removeVideoMetadata = inputs.removeVideoMetadata === true || inputs.removeVideoMetadata === "true";
-    var removeAudioMetadata = inputs.removeAudioMetadata === true || inputs.removeAudioMetadata === "true";
+    var removeVideoMetadata = String(inputs.removeVideoMetadata) === "true";
+    var removeAudioMetadata = String(inputs.removeAudioMetadata) === "true";
 
     console.log("streamMetadataRemove: input config", {
         removeVideoMetadataRaw: inputs.removeVideoMetadata,
