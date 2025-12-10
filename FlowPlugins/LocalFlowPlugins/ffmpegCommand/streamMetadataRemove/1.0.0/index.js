@@ -10,11 +10,11 @@ var codecTypeSelector = {
 var normalize = function (value) { return (value || "").toString().toLowerCase(); };
 var details = function () { return ({
     name: "Stream Metadata: Remove Handler/Title",
-    description: "Removes handler_name and title metadata from video and/or audio streams.",
+    description: "Removes handler_name and title metadata from video, audio, and/or subtitle streams.",
     style: {
         borderColor: "orange",
     },
-    tags: "video,audio",
+    tags: "video,audio,subtitle",
     isStartPlugin: false,
     pType: "",
     requiresVersion: "2.11.01",
@@ -40,6 +40,16 @@ var details = function () { return ({
                 type: "switch",
             },
             tooltip: "Remove title and handler_name from audio streams.",
+        },
+        {
+            label: "Remove subtitle stream metadata",
+            name: "removeSubtitleMetadata",
+            inputType: "boolean",
+            defaultValue: "true",
+            inputUI: {
+                type: "switch",
+            },
+            tooltip: "Remove title and handler_name from subtitle streams.",
         },
     ],
     outputs: [
@@ -200,15 +210,18 @@ var plugin = function (args) {
 
     var removeVideoMetadata = String(inputs.removeVideoMetadata) === "true";
     var removeAudioMetadata = String(inputs.removeAudioMetadata) === "true";
+    var removeSubtitleMetadata = String(inputs.removeSubtitleMetadata) === "true";
 
     console.log("streamMetadataRemove: input config", {
         removeVideoMetadataRaw: inputs.removeVideoMetadata,
         removeAudioMetadataRaw: inputs.removeAudioMetadata,
+        removeSubtitleMetadataRaw: inputs.removeSubtitleMetadata,
         removeVideoMetadata: removeVideoMetadata,
-        removeAudioMetadata: removeAudioMetadata
+        removeAudioMetadata: removeAudioMetadata,
+        removeSubtitleMetadata: removeSubtitleMetadata
     });
 
-    if (!removeVideoMetadata && !removeAudioMetadata) {
+    if (!removeVideoMetadata && !removeAudioMetadata && !removeSubtitleMetadata) {
         args.jobLog("No metadata removal requested.");
         return {
             outputFileObj: args.inputFileObj,
@@ -232,7 +245,8 @@ var plugin = function (args) {
     var changed = false;
     var newStreams = streams.map(function (stream) {
         var shouldProcess = (stream.codec_type === "video" && removeVideoMetadata)
-            || (stream.codec_type === "audio" && removeAudioMetadata);
+            || (stream.codec_type === "audio" && removeAudioMetadata)
+            || (stream.codec_type === "subtitle" && removeSubtitleMetadata);
 
         // Debug: log ALL streams
         console.log("streamMetadataRemove: processing stream", {
