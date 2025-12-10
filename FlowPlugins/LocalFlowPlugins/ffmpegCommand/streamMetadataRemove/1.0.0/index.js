@@ -33,7 +33,7 @@ var details = function () { return ({
         {
             label: "Remove video stream metadata",
             name: "removeVideoMetadata",
-            type: "boolean",
+            inputType: "boolean",
             defaultValue: "true",
             inputUI: {
                 type: "switch",
@@ -43,7 +43,7 @@ var details = function () { return ({
         {
             label: "Remove audio stream metadata",
             name: "removeAudioMetadata",
-            type: "boolean",
+            inputType: "boolean",
             defaultValue: "true",
             inputUI: {
                 type: "switch",
