@@ -272,51 +272,14 @@ var hasDataStream = function (fileObj) {
     return (ffprobe.streams || []).some(function (s) { return s && s.codec_type === 'data'; });
 };
 var insertDolbyVisionArgs = function (args) {
+    // For Dolby Vision streams, we only need -strict unofficial when copying.
+    // Do NOT use bitstream filters (hevc_mp4toannexb) for MP4-to-MP4 copying
+    // as they strip the dvcC box (Dolby Vision Configuration).
+    // Do NOT change codec tags - let ffmpeg preserve the original (hev1/dvhe/etc).
     var outputArgs = __spreadArray([], args, true);
-    var hasStrict = args.includes('-strict');
-    var hasBsf = args.some(function (arg) { return arg.startsWith('-bsf:v'); });
-    var hasTag = args.some(function (arg) { return arg.startsWith('-tag:v'); });
-
-    // Find all video codec arguments and insert DV-specific args after each
-    var offset = 0;
-    for (var i = 0; i < args.length; i += 1) {
-        var arg = args[i];
-        if (/^-c:(?:v|video)/.test(arg)) {
-            var actualIndex = i + offset;
-            var spliceAt = Math.min(outputArgs.length, actualIndex + 2);
-            var argsToInsert = [];
-
-            // Extract the stream selector from codec arg (e.g., -c:v:0 -> :0)
-            var streamSelector = '';
-            var match = arg.match(/^-c:(v|video)(:\d+)?$/);
-            if (match && match[2]) {
-                streamSelector = match[2];
-            }
-
-            // Add bitstream filter to preserve DV metadata
-            if (!hasBsf) {
-                argsToInsert.push('-bsf:v' + streamSelector);
-                argsToInsert.push('hevc_mp4toannexb,dump_extra');
-            }
-
-            // Add codec tag for proper DV encapsulation in MP4
-            if (!hasTag) {
-                argsToInsert.push('-tag:v' + streamSelector);
-                argsToInsert.push('hvc1');
-            }
-
-            if (argsToInsert.length > 0) {
-                outputArgs.splice.apply(outputArgs, __spreadArray([spliceAt, 0], argsToInsert, false));
-                offset += argsToInsert.length;
-            }
-        }
-    }
-
-    // Add global -strict unofficial if not present
-    if (!hasStrict) {
+    if (!args.includes('-strict')) {
         outputArgs.push('-strict', 'unofficial');
     }
-
     return outputArgs;
 };
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
