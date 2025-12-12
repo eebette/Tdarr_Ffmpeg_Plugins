@@ -271,18 +271,52 @@ var hasDataStream = function (fileObj) {
         || (fileObj.meta && fileObj.meta.ffProbeData))) || { streams: [] };
     return (ffprobe.streams || []).some(function (s) { return s && s.codec_type === 'data'; });
 };
-var insertStrictAfterVideoCodec = function (args) {
-    if (args.includes('-strict')) {
-        return args;
-    }
-    var insertAt = args.findIndex(function (arg) { return /^-c:(?:v|video)/.test(arg); });
+var insertDolbyVisionArgs = function (args) {
     var outputArgs = __spreadArray([], args, true);
-    if (insertAt !== -1) {
-        var spliceAt = Math.min(outputArgs.length, insertAt + 2);
-        outputArgs.splice(spliceAt, 0, '-strict', 'unofficial');
-        return outputArgs;
+    var hasStrict = args.includes('-strict');
+    var hasBsf = args.some(function (arg) { return arg.startsWith('-bsf:v'); });
+    var hasTag = args.some(function (arg) { return arg.startsWith('-tag:v'); });
+
+    // Find all video codec arguments and insert DV-specific args after each
+    var offset = 0;
+    for (var i = 0; i < args.length; i += 1) {
+        var arg = args[i];
+        if (/^-c:(?:v|video)/.test(arg)) {
+            var actualIndex = i + offset;
+            var spliceAt = Math.min(outputArgs.length, actualIndex + 2);
+            var argsToInsert = [];
+
+            // Extract the stream selector from codec arg (e.g., -c:v:0 -> :0)
+            var streamSelector = '';
+            var match = arg.match(/^-c:(v|video)(:\d+)?$/);
+            if (match && match[2]) {
+                streamSelector = match[2];
+            }
+
+            // Add bitstream filter to preserve DV metadata
+            if (!hasBsf) {
+                argsToInsert.push('-bsf:v' + streamSelector);
+                argsToInsert.push('hevc_mp4toannexb,dump_extra');
+            }
+
+            // Add codec tag for proper DV encapsulation in MP4
+            if (!hasTag) {
+                argsToInsert.push('-tag:v' + streamSelector);
+                argsToInsert.push('hvc1');
+            }
+
+            if (argsToInsert.length > 0) {
+                outputArgs.splice.apply(outputArgs, __spreadArray([spliceAt, 0], argsToInsert, false));
+                offset += argsToInsert.length;
+            }
+        }
     }
-    outputArgs.push('-strict', 'unofficial');
+
+    // Add global -strict unofficial if not present
+    if (!hasStrict) {
+        outputArgs.push('-strict', 'unofficial');
+    }
+
     return outputArgs;
 };
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -371,7 +405,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     }
                 }
                 if (shouldProcess && hasDolbyVisionStream(args.inputFileObj)) {
-                    outputArgs = insertStrictAfterVideoCodec(outputArgs);
+                    outputArgs = insertDolbyVisionArgs(outputArgs);
                 }
                 if (outputArgs.length > 0) {
                     cliArgs.push.apply(cliArgs, outputArgs);
