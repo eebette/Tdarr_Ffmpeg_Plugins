@@ -22,7 +22,18 @@ var details = function () { return ({
     requiresVersion: "2.11.01",
     sidebarPosition: 6,
     icon: "faFilter",
-    inputs: [],
+    inputs: [
+        {
+            label: "Include Title in Deduplication",
+            name: "includeTitle",
+            inputType: "boolean",
+            defaultValue: "true",
+            inputUI: {
+                type: "switch",
+            },
+            tooltip: "When enabled, subtitle streams with different titles/handler_names will be treated as separate streams. When disabled, only language and codec will be used for deduplication.",
+        },
+    ],
     outputs: [
         {
             number: 1,
@@ -170,6 +181,8 @@ var plugin = function (args) {
     var inputs = lib.loadDefaultValues(normalizeInputs(args.inputs), details);
     args.inputs = inputs;
     flowUtils.checkFfmpegCommandInit(args);
+    // Read input parameter
+    var includeTitle = String(inputs.includeTitle) === "true";
     var streams = args.variables.ffmpegCommand.streams || [];
     var subtitleStreams = streams.filter(function (s) { return s.codec_type === "subtitle"; });
     if (subtitleStreams.length === 0) {
@@ -203,7 +216,9 @@ var plugin = function (args) {
             || "");
         var codec = normalize(stream.codec_name || meta.codec_name || "");
         var distinguishingName = getDistinguishingName(stream, meta, format);
-        var key = [lang, codec, distinguishingName].join("|");
+        var key = includeTitle
+            ? [lang, codec, distinguishingName].join("|")
+            : [lang, codec].join("|");
         if (!groups.has(key)) {
             groups.set(key, []);
         }
