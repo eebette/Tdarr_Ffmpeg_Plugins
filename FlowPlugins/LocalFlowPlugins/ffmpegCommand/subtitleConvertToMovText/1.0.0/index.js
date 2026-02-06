@@ -48,6 +48,19 @@ var stripCodecArgs = function (outputArgs) {
     }
     return cleaned;
 };
+var hasDispositionFlag = function (args) {
+    return args.some(function (arg) { return /^-disposition:/i.test(arg); });
+};
+var preserveDispositions = function (outputArgs, meta) {
+    if (!meta.disposition || hasDispositionFlag(outputArgs)) {
+        return outputArgs;
+    }
+    var flags = Object.keys(meta.disposition).filter(function (k) { return meta.disposition[k] === 1; });
+    if (flags.length === 0) {
+        return outputArgs;
+    }
+    return outputArgs.concat(["-disposition:s:{outputTypeIndex}", flags.join("+")]);
+};
 var commentaryRegex = /commentary|narration|descriptive|director|producer|writer/i;
 var codecTypeSelector = {
     video: "v",
@@ -222,7 +235,7 @@ var plugin = function (args) {
         }
         if (textConvertibleCodecs.indexOf(codec) !== -1 || codec.length === 0) {
             var cleaned = stripCodecArgs(stream.outputArgs || []);
-            var updatedArgs = ["-c:s", "mov_text"].concat(cleaned);
+            var updatedArgs = preserveDispositions(["-c:s", "mov_text"].concat(cleaned), meta);
             changed = true;
             conversions += 1;
             return Object.assign({}, stream, {
@@ -238,7 +251,7 @@ var plugin = function (args) {
         }
         // Unknown subtitle codec: try converting anyway to avoid MP4 mux failure.
         var cleanedUnknown = stripCodecArgs(stream.outputArgs || []);
-        var updatedUnknownArgs = ["-c:s", "mov_text"].concat(cleanedUnknown);
+        var updatedUnknownArgs = preserveDispositions(["-c:s", "mov_text"].concat(cleanedUnknown), meta);
         changed = true;
         conversions += 1;
         return Object.assign({}, stream, {
