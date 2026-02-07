@@ -61,6 +61,14 @@ var preserveDispositions = function (outputArgs, meta) {
     }
     return outputArgs.concat(["-disposition:s:{outputTypeIndex}", flags.join("+")]);
 };
+var appendTitleMetadata = function (outputArgs, originalCodec, meta) {
+    var existingTitle = ((meta.tags && (meta.tags.title || meta.tags.handler_name)) || "").toString().trim();
+    var codecLabel = (originalCodec || "unknown").toUpperCase();
+    var newTitle = existingTitle
+        ? existingTitle + " - Converted from " + codecLabel
+        : "Converted from " + codecLabel;
+    return outputArgs.concat(["-metadata:s:s:{outputTypeIndex}", "title=" + newTitle]);
+};
 var commentaryRegex = /commentary|narration|descriptive|director|producer|writer/i;
 var codecTypeSelector = {
     video: "v",
@@ -178,7 +186,18 @@ var details = function () { return ({
     requiresVersion: "2.11.01",
     sidebarPosition: 6,
     icon: "faClosedCaptioning",
-    inputs: [],
+    inputs: [
+        {
+            label: "Append 'Converted from' to title",
+            name: "appendConvertedFrom",
+            type: "boolean",
+            defaultValue: "false",
+            inputUI: {
+                type: "switch",
+            },
+            tooltip: "When enabled, appends 'Converted from {codec}' to the subtitle stream title. If the stream already has a title, a dash separator is included (e.g., 'MyTitle - Converted from SRT').",
+        },
+    ],
     outputs: [
         {
             number: 1,
@@ -191,6 +210,7 @@ var plugin = function (args) {
     var lib = require("../../../../../methods/lib")();
     var inputs = lib.loadDefaultValues(normalizeInputs(args.inputs), details);
     args.inputs = inputs;
+    var appendConvertedFrom = String(inputs.appendConvertedFrom) === "true";
     flowUtils.checkFfmpegCommandInit(args);
     var targetContainer = args.variables.ffmpegCommand.container
         || args.inputFileObj.container
@@ -236,6 +256,9 @@ var plugin = function (args) {
         if (textConvertibleCodecs.indexOf(codec) !== -1 || codec.length === 0) {
             var cleaned = stripCodecArgs(stream.outputArgs || []);
             var updatedArgs = preserveDispositions(["-c:s", "mov_text"].concat(cleaned), meta);
+            if (appendConvertedFrom) {
+                updatedArgs = appendTitleMetadata(updatedArgs, codec, meta);
+            }
             changed = true;
             conversions += 1;
             return Object.assign({}, stream, {
@@ -252,6 +275,9 @@ var plugin = function (args) {
         // Unknown subtitle codec: try converting anyway to avoid MP4 mux failure.
         var cleanedUnknown = stripCodecArgs(stream.outputArgs || []);
         var updatedUnknownArgs = preserveDispositions(["-c:s", "mov_text"].concat(cleanedUnknown), meta);
+        if (appendConvertedFrom) {
+            updatedUnknownArgs = appendTitleMetadata(updatedUnknownArgs, codec, meta);
+        }
         changed = true;
         conversions += 1;
         return Object.assign({}, stream, {
