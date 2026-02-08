@@ -91,6 +91,10 @@ var scrubTitle = function (title) {
         .trim();
 };
 var isCommentary = function (stream) {
+    var disposition = stream.disposition || {};
+    if (disposition.comment === 1 || disposition.comment === "1") {
+        return true;
+    }
     var title = getTitleText(stream);
     return commentaryRegex.test(title);
 };
