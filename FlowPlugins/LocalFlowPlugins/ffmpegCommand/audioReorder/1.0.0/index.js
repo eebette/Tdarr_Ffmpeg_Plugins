@@ -295,7 +295,7 @@ var plugin = function (args) {
             originalIndex: idx,
         };
     });
-    sortable.sort(function (a, b) {
+    var sortWithinGroup = function (a, b) {
         var primaryA = precedence === "Language Order" ? a.langRank : a.codecRank;
         var primaryB = precedence === "Language Order" ? b.langRank : b.codecRank;
         if (primaryA !== primaryB) {
@@ -306,9 +306,6 @@ var plugin = function (args) {
         if (secondaryA !== secondaryB) {
             return secondaryA - secondaryB;
         }
-        if (a.commentary !== b.commentary) {
-            return a.commentary - b.commentary;
-        }
         if (a.channels !== b.channels) {
             return b.channels - a.channels;
         }
@@ -316,7 +313,12 @@ var plugin = function (args) {
             return b.bitrate - a.bitrate;
         }
         return a.originalIndex - b.originalIndex;
-    });
+    };
+    var nonCommentary = sortable.filter(function (item) { return item.commentary === 0; });
+    var commentaryGroup = sortable.filter(function (item) { return item.commentary === 1; });
+    nonCommentary.sort(sortWithinGroup);
+    commentaryGroup.sort(sortWithinGroup);
+    sortable = nonCommentary.concat(commentaryGroup);
     // If ordering already matches and default disposition is already on the target stream, skip changes.
     var targetDefaultIndex = sortable.findIndex(function (item) { return item.commentary === 0; });
     if (targetDefaultIndex === -1) {
