@@ -321,7 +321,9 @@ var plugin = function (args) {
         var parsed = parseDisposition(updatedOutputArgs);
         var existingDefault = parsed.default !== null ? parsed.default : (item.stream.disposition && item.stream.disposition.default === 1);
         var existingForced = parsed.forced !== null ? parsed.forced : (item.stream.disposition && item.stream.disposition.forced === 1);
-        if (existingDefault !== makeDefault || existingForced !== makeForced) {
+        // Always set explicit disposition flags to prevent ffmpeg from auto-defaulting
+        // the first subtitle during downstream remuxes
+        if (existingDefault !== makeDefault || existingForced !== makeForced || parsed.default === null) {
             updatedOutputArgs = updateDisposition(updatedOutputArgs, makeDefault, makeForced);
         }
         if (idx !== item.originalIndex) {
