@@ -305,10 +305,14 @@ var plugin = function (args) {
         return a.originalIndex - b.originalIndex;
     });
     var reordered = [];
-    var firstDefaultIndex = sortable.findIndex(function (item) { return item.commentary === 0; });
-    if (firstDefaultIndex === -1) {
-        firstDefaultIndex = 0;
-    }
+    // Only set a default if any subtitle stream was already marked as default
+    var hasExistingDefault = sortable.some(function (item) {
+        var parsed = parseDisposition(item.stream.outputArgs || []);
+        return (parsed.default !== null ? parsed.default : (item.stream.disposition && item.stream.disposition.default === 1));
+    });
+    var firstDefaultIndex = hasExistingDefault
+        ? sortable.findIndex(function (item) { return item.commentary === 0; })
+        : -1;
     var changed = false;
     sortable.forEach(function (item, idx) {
         var makeDefault = idx === firstDefaultIndex;
