@@ -441,6 +441,13 @@ var plugin = function (args) {
             // Copy existing stream
             if (useFlowState) {
                 // Keep existing stream with all modifications from previous plugins
+                // Ensure sourceTypeIndex is set so normalizeMapArgs uses the correct
+                // source position (not the output position, which shifts when new
+                // streams are inserted before this one).
+                if (typeof entry.source.sourceTypeIndex !== "number") {
+                    entry.source.sourceTypeIndex =
+                        typeof sourceMeta.typeIndex === "number" ? sourceMeta.typeIndex : undefined;
+                }
                 outputStreams.push(entry.source);
             } else {
                 // Build new stream entry
