@@ -412,11 +412,16 @@ var plugin = function (args) {
     // Build audio plan based on HD streams and needed conversions
     var audioPlan = buildAudioPlan(audioStreams, hdStreams, matches, conversions);
 
+    // Track which HD streams are getting a new EAC3 so we can move the default flag
+    var convertedHdIds = new Set(conversions.map(function (s) { return s.index; }));
+
     audioPlan.forEach(function (entry) {
         var sourceMeta = metaByIndex.get(entry.source.index) || entry.source;
+        var sourceDisposition = (sourceMeta.disposition || {});
+        var sourceIsDefault = sourceDisposition.default === 1 || sourceDisposition.default === "1";
 
         if (entry.action === "transcode") {
-            // Create new EAC3 stream
+            // Create new EAC3 stream — inherit default flag from the HD source
             var tags = sourceMeta.tags || {};
             outputStreams.push({
                 index: entry.id,
@@ -428,7 +433,7 @@ var plugin = function (args) {
                     language: tags.language,
                 },
                 mapArgs: getMapArgs(sourceMeta),
-                outputArgs: makeEac3Args(sourceMeta, false),
+                outputArgs: makeEac3Args(sourceMeta, sourceIsDefault),
                 inputArgs: [],
                 sourceTypeIndex: typeof sourceMeta.typeIndex === "number" ? sourceMeta.typeIndex : undefined,
                 typeIndex: typeof sourceMeta.typeIndex === "number" ? sourceMeta.typeIndex : undefined,
@@ -436,6 +441,8 @@ var plugin = function (args) {
             });
         } else {
             // Copy existing stream
+            // Clear default flag if this HD stream just got a new EAC3 fallback
+            var clearDefault = convertedHdIds.has(entry.source.index) && sourceIsDefault;
             if (useFlowState) {
                 // Keep existing stream with all modifications from previous plugins
                 // Ensure sourceTypeIndex is set so normalizeMapArgs uses the correct
@@ -445,10 +452,19 @@ var plugin = function (args) {
                     entry.source.sourceTypeIndex =
                         typeof sourceMeta.typeIndex === "number" ? sourceMeta.typeIndex : undefined;
                 }
+                if (clearDefault) {
+                    entry.source.outputArgs = (entry.source.outputArgs || []).concat([
+                        "-disposition:a:{outputTypeIndex}", "0"
+                    ]);
+                }
                 outputStreams.push(entry.source);
             } else {
                 // Build new stream entry
                 var tags = sourceMeta.tags || {};
+                var copyArgs = entry.source.outputArgs || makeCopyArgs(entry.source, false);
+                if (clearDefault && !copyArgs.some(function (a) { return a.startsWith("-disposition"); })) {
+                    copyArgs = copyArgs.concat(["-disposition:a:{outputTypeIndex}", "0"]);
+                }
                 outputStreams.push({
                     index: entry.source.index,
                     codec_type: "audio",
@@ -462,7 +478,7 @@ var plugin = function (args) {
                         BPS: tags.BPS,
                     },
                     mapArgs: entry.source.mapArgs || getMapArgs(sourceMeta),
-                    outputArgs: entry.source.outputArgs || makeCopyArgs(entry.source, false),
+                    outputArgs: copyArgs,
                     inputArgs: [],
                     sourceTypeIndex: typeof entry.source.sourceTypeIndex === "number"
                         ? entry.source.sourceTypeIndex
