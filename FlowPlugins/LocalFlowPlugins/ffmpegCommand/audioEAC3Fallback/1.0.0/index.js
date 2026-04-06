@@ -426,9 +426,6 @@ var plugin = function (args) {
                 channel_layout: sourceMeta.channel_layout,
                 tags: {
                     language: tags.language,
-                    title: tags.title,
-                    handler_name: tags.handler_name,
-                    BPS: tags.BPS,
                 },
                 mapArgs: getMapArgs(sourceMeta),
                 outputArgs: makeEac3Args(sourceMeta, false),
