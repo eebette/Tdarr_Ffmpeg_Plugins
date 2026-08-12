@@ -134,9 +134,16 @@ var streamsLikelyMatch = function (hdStream, candidate) {
     return true;
 };
 var getMapArgs = function (stream) {
+    // Attached-pics (normalized to codec_type "attachment" by ffmpegCommandStart)
+    // and data streams cannot be addressed reliably by type selector: ffmpeg's
+    // "t" selector only matches real container attachments, so "0:t:N" hard-fails
+    // on attached-pic streams. Map them by absolute index instead.
+    if (stream.codec_type === "attachment" || stream.codec_type === "data") {
+        return ["-map", "0:".concat(stream.index)];
+    }
     var selector = codecTypeSelector[stream.codec_type] || stream.codec_type || "";
     var typeIndex = typeof stream.typeIndex === "number" ? stream.typeIndex : 0;
-    var optional = (selector === "v" || selector === "t") ? "" : "?";
+    var optional = selector === "v" ? "" : "?";
     return ["-map", "0:".concat(selector, ":").concat(typeIndex).concat(optional)];
 };
 var getOutputStreamIndex = function (streams, stream) {
@@ -177,6 +184,11 @@ var normalizeCodecSelectors = function (outputArgs, streams, stream) {
     });
 };
 var normalizeMapArgs = function (mapArgs, streams, stream) {
+    // Attached-pics/data streams: keep the absolute-index map from
+    // ffmpegCommandStart; type selectors ("t"/"d") mis-address them.
+    if (stream.codec_type === "attachment" || stream.codec_type === "data") {
+        return mapArgs;
+    }
     var selector = codecTypeSelector[stream.codec_type] || stream.codec_type || "";
     if (!selector) {
         return mapArgs;
@@ -184,7 +196,7 @@ var normalizeMapArgs = function (mapArgs, streams, stream) {
     var sourceTypeIndex = typeof stream.sourceTypeIndex === "number"
         ? stream.sourceTypeIndex
         : getOutputStreamTypeIndex(streams, stream);
-    var mapTarget = "0:".concat(selector, ":").concat(sourceTypeIndex).concat(selector === "v" || selector === "t" ? "" : "?");
+    var mapTarget = "0:".concat(selector, ":").concat(sourceTypeIndex).concat(selector === "v" ? "" : "?");
     return mapArgs.map(function (arg, idx) {
         var isMapValue = idx > 0 && mapArgs[idx - 1] === "-map";
         if (isMapValue && /^\d+:\d+$/.test(arg)) {
