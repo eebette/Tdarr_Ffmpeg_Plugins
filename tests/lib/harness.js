@@ -60,6 +60,16 @@ const fakeFfmpeg = () => {
   return file;
 };
 
+// Tdarr hands plugin every declared input: stored value, else defaultValue.
+// Without this, plugins reading inputs by name see blanks instead of defaults.
+const withDefaults = (mod, stored) => {
+  const inputs = JSON.parse(JSON.stringify(stored || {}));
+  ((mod.details().inputs) || []).forEach((input) => {
+    if (inputs[input.name] === undefined || inputs[input.name] === "") inputs[input.name] = input.defaultValue;
+  });
+  return inputs;
+};
+
 /**
  * Run flow steps in order, like Tdarr following output 1.
  *
@@ -89,7 +99,7 @@ const runChain = async (steps, fileObj, opts = {}) => {
       inputFileObj: current,
       originalLibraryFile: original,
       librarySettings: { _id: "testlib", name: "Test Library" },
-      inputs: JSON.parse(JSON.stringify(step.inputs || {})),
+      inputs: withDefaults(mod, step.inputs),
       variables,
       jobLog: (text) => {
         log.push(String(text));

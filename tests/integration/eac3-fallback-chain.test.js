@@ -102,3 +102,13 @@ test("cover art between fonts: all kept", async () => {
     "v:h264", "a:eac3:jpn:6:a0*", "a:truehd:jpn:6:a0", "s:ass:eng:s0", "pic:cover.png:png", "t:a.ttf", "t:b.ttf",
   ].sort());
 });
+
+// Known gap: plugin builds audio as "HD tracks (fallback before each) first, rest after".
+// Lossy track that sat ahead of HD track ends up behind it, in source files and after an
+// earlier Reorder Audio. Desired: insert EAC3 before its HD track, move nothing else.
+test("lossy track ahead of HD track keeps its place", { todo: "audioEAC3Fallback hoists HD tracks to front" }, async () => {
+  const r = await run("lossy-first", {
+    audio: [{ codec: "ac3", ch: 2, lang: "jpn", default: true }, { codec: "truehd", ch: 6, lang: "eng" }],
+  });
+  assert.deepEqual(r.after, ["v:h264", "a:ac3:jpn:2:a0*", "a:eac3:eng:6:a1", "a:truehd:eng:6:a1"]);
+});
