@@ -62,85 +62,6 @@ var getStreams = function (fileObj) {
         });
     });
 };
-var getOutputStreamIndex = function (streams, stream) {
-    var filtered = streams.filter(function (s) { return !s.removed; });
-    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
-    return position === -1 ? 0 : position;
-};
-var getOutputStreamTypeIndex = function (streams, stream) {
-    var filtered = streams.filter(function (s) { return !s.removed && s.codec_type === stream.codec_type; });
-    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
-    return position === -1 ? 0 : position;
-};
-var getCodecSelectorForStream = function (streams, stream) {
-    var selector = stream.codec_type === "audio" ? "a" : stream.codec_type || "";
-    if (!selector || selector.length !== 1) {
-        return "-c:".concat(getOutputStreamIndex(streams, stream));
-    }
-    return "-c:".concat(selector, ":").concat(getOutputStreamTypeIndex(streams, stream));
-};
-var applyPlaceholders = function (args, streams, stream) {
-    return args.map(function (arg) {
-        var updated = arg;
-        if (updated.includes("{outputIndex}")) {
-            updated = updated.replace("{outputIndex}", String(getOutputStreamIndex(streams, stream)));
-        }
-        if (updated.includes("{outputTypeIndex}")) {
-            updated = updated.replace("{outputTypeIndex}", String(getOutputStreamTypeIndex(streams, stream)));
-        }
-        return updated;
-    });
-};
-var normalizeCodecSelectors = function (outputArgs, streams, stream) {
-    var codecSelector = getCodecSelectorForStream(streams, stream);
-    return outputArgs.map(function (arg) {
-        if (/^-c:[a-z]+$/.test(arg)) {
-            return codecSelector;
-        }
-        if (/^-c:\d+$/.test(arg)) {
-            return codecSelector;
-        }
-        if (/^-c:[a-z]+:\d+$/.test(arg)) {
-            return codecSelector;
-        }
-        return arg;
-    });
-};
-var normalizeMapArgs = function (mapArgs, streams, stream) {
-    // Attached-pics/data streams: keep the absolute-index map from
-    // ffmpegCommandStart; type selectors ("t"/"d") mis-address them.
-    if (stream.codec_type === "attachment" || stream.codec_type === "data") {
-        return mapArgs;
-    }
-    var selector = stream.codec_type === "audio" ? "a" : stream.codec_type || "";
-    if (!selector) {
-        return mapArgs;
-    }
-    var originalTypeIndex = typeof stream.sourceTypeIndex === "number"
-        ? stream.sourceTypeIndex
-        : (typeof stream.typeIndex === "number" ? stream.typeIndex : getOutputStreamTypeIndex(streams, stream));
-    var mapTarget = "0:".concat(selector, ":").concat(originalTypeIndex).concat(selector === "v" ? "" : "?");
-    return mapArgs.map(function (arg, idx) {
-        var isMapValue = idx > 0 && mapArgs[idx - 1] === "-map";
-        if (isMapValue && /^\d+:\d+$/.test(arg)) {
-            return mapTarget;
-        }
-        return arg;
-    });
-};
-var buildOverallOutputArgs = function (streams) {
-    var activeStreams = (streams || []).filter(function (s) { return !s.removed; });
-    return activeStreams.reduce(function (acc, stream) {
-        var replacedArgs = applyPlaceholders(stream.outputArgs || [], activeStreams, stream);
-        var mapArgs = normalizeMapArgs(stream.mapArgs || [], activeStreams, stream);
-        var outputArgsForStream = replacedArgs.length === 0
-            ? [getCodecSelectorForStream(activeStreams, stream), "copy"]
-            : normalizeCodecSelectors(replacedArgs, activeStreams, stream);
-        acc.push.apply(acc, mapArgs);
-        acc.push.apply(acc, outputArgsForStream);
-        return acc;
-    }, []);
-};
 var extractLanguageFromOutputArgs = function (outputArgs) {
     for (var i = 0; i < outputArgs.length - 1; i += 1) {
         if (/^-metadata:s:a/.test(outputArgs[i]) && /^language=/.test(outputArgs[i + 1])) {
@@ -209,13 +130,10 @@ var plugin = function (args) {
     });
     if (changed) {
         var keptStreams = filteredStreams.filter(function (s) { return !s.removed; });
-        var overallOutputArgs = buildOverallOutputArgs(keptStreams);
         console.log("audioLanguageFilter: setting filtered streams/args", {
             streams: keptStreams,
-            overallOutputArgs: overallOutputArgs,
         });
         args.variables.ffmpegCommand.streams = keptStreams;
-        args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
         args.variables.ffmpegCommand.shouldProcess = true;
         args.variables.ffmpegCommand.init = true;
     }

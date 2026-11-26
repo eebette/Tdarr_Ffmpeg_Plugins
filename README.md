@@ -29,6 +29,17 @@ Prereqs: `curl` or `wget`, and `tar` (standard on most distros).
 - Send only the `index.js` entrypoints to Tdarr; no extra assets are needed.
 - Keep filter arguments before stream mappings; the executor will preserve order so FFmpeg accepts the command.
 
+## How the plugins fit together
+Plugins between `Begin Command` and `Execute` only edit the stream list in
+`variables.ffmpegCommand.streams`: remove an entry, move it, or put options for that one stream
+in its `outputArgs`. `Execute` alone turns the final list into `-map` and codec arguments, so
+plugins can be combined in any order. The exact contract is at the top of
+`ffmpegCommandExecute/1.0.0/index.js`; `tests/` checks it for every plugin pair (see
+`tests/README.md`).
+
+Cover art in Matroska files is extracted and re-attached by `Execute`, because ffmpeg cannot
+stream-copy it as an attachment.
+
 ## Plugin catalog 📦
 ### Command execution
 - `ffmpegCommand/Execute`: Runs FFmpeg with arguments built earlier in the flow. Respects per-stream input/output args, mapping, and container settings, and short-circuits when no processing is required.

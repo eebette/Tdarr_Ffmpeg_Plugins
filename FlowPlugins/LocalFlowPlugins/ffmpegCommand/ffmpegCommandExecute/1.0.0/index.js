@@ -1,56 +1,25 @@
 "use strict";
-var fs = require("fs");
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __generator = (this && this.__generator) || function (thisArg, body) {
-    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
-    return g.next = verb(0), g["throw"] = verb(1), g["return"] = verb(2), typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
-    function verb(n) { return function (v) { return step([n, v]); }; }
-    function step(op) {
-        if (f) throw new TypeError("Generator is already executing.");
-        while (g && (g = 0, op[0] && (_ = 0)), _) try {
-            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
-            if (y = 0, t) op = [op[0] & 2, t.value];
-            switch (op[0]) {
-                case 0: case 1: t = op; break;
-                case 4: _.label++; return { value: op[1], done: false };
-                case 5: _.label++; y = op[1]; op = [0]; continue;
-                case 7: op = _.ops.pop(); _.trys.pop(); continue;
-                default:
-                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
-                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
-                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
-                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
-                    if (t[2]) _.ops.pop();
-                    _.trys.pop(); continue;
-            }
-            op = body.call(thisArg, _);
-        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
-        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
-    }
-};
-var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
-    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
-        if (ar || !(i in from)) {
-            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
-            ar[i] = from[i];
-        }
-    }
-    return to.concat(ar || Array.prototype.slice.call(from));
-};
+// Execute = only place that turns stream state into ffmpeg arguments.
+//
+// Contract with every other ffmpegCommand plugin: edit variables.ffmpegCommand.streams
+// and nothing else. Per stream entry:
+//   index       input stream it stands for (set by Begin Command); never change
+//   removed     true = drop from output (deleting entry from array works too)
+//   mapArgs     ["-map", "<input>:<stream>"]; absolute index from Begin Command
+//   outputArgs  options for this stream only. Use {outputIndex} / {outputTypeIndex}
+//               placeholders; codec option may be written as plain "-c"
+//   inputArgs   options placed before -i
+// Array order = output order. Cover art (attached pic) kept in an mkv is not mapped:
+// ffmpeg would write it as a plain video track, so Execute extracts and re-attaches it.
+// Plugins never write maps into overall arguments and never
+// set shouldProcess = false: a plugin with nothing to do must not cancel earlier ones.
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.plugin = exports.details = void 0;
+var fs = require("fs");
+var path = require("path");
 var cliUtils_1 = require("../../../../FlowHelpers/1.0.0/cliUtils");
 var fileUtils_1 = require("../../../../FlowHelpers/1.0.0/fileUtils");
 var flowUtils_1 = require("../../../../FlowHelpers/1.0.0/interfaces/flowUtils");
-/* eslint no-plusplus: ["error", { "allowForLoopAfterthoughts": true }] */
 var details = function () { return ({
     name: 'Execute',
     description: 'Execute the created FFmpeg command, ensuring filter args are ordered before mapping args',
@@ -81,173 +50,135 @@ var normalizeInputs = function (inputs) {
     }
     return [];
 };
-var getOuputStreamIndex = function (streams, stream) {
-    var filtered = streams.filter(function (s) { return !s.removed; });
-    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
-    return position === -1 ? 0 : position;
-};
-var getOuputStreamTypeIndex = function (streams, stream) {
-    var filtered = streams.filter(function (s) { return !s.removed && s.codec_type === stream.codec_type; });
-    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
-    return position === -1 ? 0 : position;
-};
 var isFilterArgument = function (arg) { return arg === '-vf' || arg.startsWith('-vf:') || arg.startsWith('-filter:') || arg === '-filter_complex' || arg.startsWith('-filter_complex:'); };
 var isMetadataArgument = function (arg) { return arg === '-metadata' || arg.startsWith('-metadata:'); };
-var codecTypeToSelector = {
-    video: 'v',
-    audio: 'a',
-    subtitle: 's',
-    data: 'd',
-    attachment: 't',
-};
-var getCodecSelectorForStream = function (streams, stream) {
-    var typeSelector = codecTypeToSelector[stream.codec_type];
-    if (!typeSelector) {
-        return "-c:".concat(getOuputStreamIndex(streams, stream));
-    }
-    return "-c:".concat(typeSelector, ":").concat(getOuputStreamTypeIndex(streams, stream));
-};
-var normalizeCodecSelectors = function (outputArgs, streams, stream) {
-    var codecSelector = getCodecSelectorForStream(streams, stream);
-    return outputArgs.map(function (arg) {
-        if (/^-c:[a-z]+$/.test(arg)) {
-            return codecSelector;
-        }
-        if (/^-c:\d+$/.test(arg)) {
-            return codecSelector;
-        }
-        if (/^-c:[a-z]+:\d+$/.test(arg)) {
-            return codecSelector;
-        }
-        return arg;
-    });
-};
-var normalizeMapArgs = function (mapArgs, streams, stream) {
-    var typeSelector = codecTypeToSelector[stream.codec_type];
-    if (!typeSelector) {
-        return mapArgs;
-    }
-    var mapTarget = "0:".concat(typeSelector, ":").concat(getOuputStreamTypeIndex(streams, stream)).concat(typeSelector === 'v' || typeSelector === 't' ? '' : '?');
-    return mapArgs.map(function (arg, idx) {
-        var isMapValue = idx > 0 && mapArgs[idx - 1] === '-map';
-        if (isMapValue && /^\d+:\d+$/.test(arg)) {
-            return mapTarget;
-        }
-        return arg;
-    });
-};
-var applyPlaceholders = function (args, streams, stream) {
-    return args.map(function (arg) {
-        var updated = arg;
-        if (updated.includes('{outputIndex}')) {
-            updated = updated.replace('{outputIndex}', String(getOuputStreamIndex(streams, stream)));
-        }
-        if (updated.includes('{outputTypeIndex}')) {
-            updated = updated.replace('{outputTypeIndex}', String(getOuputStreamTypeIndex(streams, stream)));
-        }
-        return updated;
-    });
-};
-var buildOutputArgsFromStreams = function (streams) {
-    var activeStreams = (streams || []).filter(function (s) { return !s.removed; });
-    return activeStreams.reduce(function (acc, stream) {
-        var replacedArgs = applyPlaceholders(stream.outputArgs || [], activeStreams, stream);
-        var mapArgs = normalizeMapArgs(stream.mapArgs || [], activeStreams, stream);
-        var normalizedArgs = normalizeCodecSelectors(replacedArgs, activeStreams, stream);
-        var hasCodecFlag = normalizedArgs.some(function (arg) { return /^-(?:c|codec)(?::[a-z]+(?::\d+)?)?$/i.test(arg); });
-        var outputArgsForStream = hasCodecFlag
-            ? normalizedArgs
-            : __spreadArray([getCodecSelectorForStream(activeStreams, stream), 'copy'], normalizedArgs, true);
-        acc.push.apply(acc, mapArgs);
-        acc.push.apply(acc, outputArgsForStream);
-        return acc;
-    }, []);
-};
-var buildNegativeMapArgs = function (removedStreams) {
-    var targets = (removedStreams || []).filter(function (s) { return typeof s.index === 'number'; });
-    if (targets.length === 0) {
-        return [];
-    }
-    var args = [];
-    var typeSelectors = new Set();
-    targets.forEach(function (stream) {
-        args.push('-map');
-        args.push("-0:".concat(stream.index));
-        var selector = codecTypeToSelector[stream.codec_type];
-        if (selector) {
-            typeSelectors.add(selector);
-        }
-    });
-    typeSelectors.forEach(function (selector) {
-        args.push('-map');
-        args.push("-0:".concat(selector));
-    });
-    return args;
-};
-var moveFilterArgsBeforeMaps = function (args) {
-    var filterArgs = [];
-    var argsWithoutFilters = [];
-    for (var i = 0; i < args.length; i += 1) {
-        var arg = args[i];
-        if (isFilterArgument(arg)) {
-            filterArgs.push(arg);
-            if (i + 1 < args.length) {
-                filterArgs.push(args[i + 1]);
-                i += 1;
-            }
-        }
-        else {
-            argsWithoutFilters.push(arg);
-        }
-    }
-    if (filterArgs.length === 0) {
-        return __spreadArray([], args, true);
-    }
-    var firstMapIndex = argsWithoutFilters.findIndex(function (value) { return value === '-map'; });
-    if (firstMapIndex === -1) {
-        return __spreadArray([], args, true);
-    }
-    argsWithoutFilters.splice.apply(argsWithoutFilters, __spreadArray([firstMapIndex, 0], filterArgs, false));
-    return argsWithoutFilters;
-};
-var moveMetadataArgsBeforeMaps = function (args) {
-    var metadataArgs = [];
-    var argsWithoutMetadata = [];
-    for (var i = 0; i < args.length; i += 1) {
-        var arg = args[i];
-        if (isMetadataArgument(arg)) {
-            metadataArgs.push(arg);
-            if (i + 1 < args.length) {
-                metadataArgs.push(args[i + 1]);
-                i += 1;
-            }
-        }
-        else {
-            argsWithoutMetadata.push(arg);
-        }
-    }
-    if (metadataArgs.length === 0) {
-        return __spreadArray([], args, true);
-    }
-    var firstMapIndex = argsWithoutMetadata.findIndex(function (value) { return value === '-map'; });
-    if (firstMapIndex === -1) {
-        return __spreadArray([], args, true);
-    }
-    var lastFilterIndex = -1;
-    for (var j = 0; j < firstMapIndex; j += 1) {
-        if (isFilterArgument(argsWithoutMetadata[j])) {
-            lastFilterIndex = j + 1 < argsWithoutMetadata.length ? j + 1 : j;
-        }
-    }
-    var insertIndex = lastFilterIndex === -1 ? firstMapIndex : lastFilterIndex + 1;
-    argsWithoutMetadata.splice.apply(argsWithoutMetadata, __spreadArray([insertIndex, 0], metadataArgs, false));
-    return argsWithoutMetadata;
-};
-var hasDolbyVisionStream = function (fileObj) {
+var isCodecFlag = function (arg) { return /^-(?:c|codec)(?::.*)?$/i.test(arg); };
+var getProbeStreams = function (fileObj) {
     var ffprobe = (fileObj && (fileObj.ffprobeData
         || fileObj.ffProbeData
         || (fileObj.meta && fileObj.meta.ffProbeData))) || { streams: [] };
-    return (ffprobe.streams || []).some(function (s) {
+    return ffprobe.streams || [];
+};
+// Stream type as ffmpeg counts it. Begin Command relabels attached pics (cover art)
+// as "attachment"; ffmpeg still treats them as video ("v"), never as "t".
+var ffmpegTypeOf = function (stream) {
+    if (Number((stream.disposition || {}).attached_pic) === 1) {
+        return 'v';
+    }
+    return { video: 'v', audio: 'a', subtitle: 's', data: 'd', attachment: 't' }[stream.codec_type] || '';
+};
+var isAttachedPic = function (stream) { return Number((stream.disposition || {}).attached_pic) === 1; };
+var PIC_TYPES = {
+    png: { ext: 'png', mime: 'image/png' },
+    mjpeg: { ext: 'jpg', mime: 'image/jpeg' },
+    bmp: { ext: 'bmp', mime: 'image/bmp' },
+    gif: { ext: 'gif', mime: 'image/gif' },
+    webp: { ext: 'webp', mime: 'image/webp' },
+};
+/**
+ * Cover art entries Execute must carry by extract + "-attach" instead of "-map".
+ *
+ * ffmpeg cannot stream-copy an attached pic into matroska as attachment (lands as
+ * video track; with an encoder running and fonts mapped first the muxer even aborts:
+ * "Received a packet for an attachment stream"). Only main-input pics of known image
+ * type qualify; anything else stays mapped as before.
+ *
+ * :return: [{stream, file name, mime}]
+ */
+var planCoverArt = function (streams, probeStreams, container) {
+    if (container !== 'mkv') {
+        return [];
+    }
+    var plan = [];
+    streams.forEach(function (stream) {
+        var mapTarget = (stream.mapArgs || [])[1];
+        var fromMainInput = typeof stream.index === 'number' && (mapTarget === undefined || mapTarget === '0:'.concat(stream.index));
+        if (!isAttachedPic(stream) || !fromMainInput) {
+            return;
+        }
+        var meta = probeStreams[stream.index] || stream;
+        var type = PIC_TYPES[String(stream.codec_name || meta.codec_name || '').toLowerCase()];
+        if (!type) {
+            return;
+        }
+        var tags = stream.tags || meta.tags || {};
+        var name = path.basename(String(tags.filename || tags.FILENAME || '')) || 'cover.'.concat(type.ext);
+        plan.push({ stream: stream, name: name, mime: tags.mimetype || tags.MIMETYPE || type.mime });
+    });
+    return plan;
+};
+/**
+ * Maps + per-stream options for kept streams, in order.
+ *
+ * Codec option always addressed by absolute output index ("-c:3"): exact for
+ * every stream type, no per-type counting to drift.
+ */
+var buildOutputArgsFromStreams = function (streams) {
+    var typeCounters = {};
+    return streams.reduce(function (acc, stream, outputIndex) {
+        var type = ffmpegTypeOf(stream);
+        var outputTypeIndex = typeCounters[type] || 0;
+        typeCounters[type] = outputTypeIndex + 1;
+        var mapArgs = (stream.mapArgs && stream.mapArgs.length > 0)
+            ? stream.mapArgs
+            : ['-map', '0:'.concat(stream.index)];
+        var ownArgs = stream.outputArgs || [];
+        var outputArgs = ownArgs.map(function (arg) {
+            if (isCodecFlag(arg)) {
+                return '-c:'.concat(outputIndex);
+            }
+            return arg
+                .split('{outputIndex}').join(String(outputIndex))
+                .split('{outputTypeIndex}').join(String(outputTypeIndex));
+        });
+        if (!ownArgs.some(isCodecFlag)) {
+            outputArgs = ['-c:'.concat(outputIndex), 'copy'].concat(outputArgs);
+        }
+        acc.push.apply(acc, mapArgs);
+        acc.push.apply(acc, outputArgs);
+        return acc;
+    }, []);
+};
+// Kept entries still exactly the input's streams, in input order?
+var isInputLayout = function (streams, probeStreams) {
+    return streams.length === probeStreams.length && streams.every(function (stream, pos) {
+        var probeIndex = typeof probeStreams[pos].index === 'number' ? probeStreams[pos].index : pos;
+        return stream.index === probeIndex;
+    });
+};
+var moveArgsBeforeMaps = function (args, isMovable, afterFilters) {
+    var moved = [];
+    var rest = [];
+    for (var i = 0; i < args.length; i += 1) {
+        if (isMovable(args[i])) {
+            moved.push(args[i]);
+            if (i + 1 < args.length) {
+                moved.push(args[i + 1]);
+                i += 1;
+            }
+        }
+        else {
+            rest.push(args[i]);
+        }
+    }
+    var firstMapIndex = rest.indexOf('-map');
+    if (moved.length === 0 || firstMapIndex === -1) {
+        return args.slice();
+    }
+    var insertIndex = firstMapIndex;
+    if (afterFilters) {
+        // metadata goes after any filter args already sitting before maps
+        for (var j = 0; j < firstMapIndex; j += 1) {
+            if (isFilterArgument(rest[j])) {
+                insertIndex = Math.min(j + 2, firstMapIndex);
+            }
+        }
+    }
+    rest.splice.apply(rest, [insertIndex, 0].concat(moved));
+    return rest;
+};
+var hasDolbyVisionStream = function (fileObj) {
+    return getProbeStreams(fileObj).some(function (s) {
         if (!s || s.codec_type !== 'video') {
             return false;
         }
@@ -265,205 +196,177 @@ var hasDolbyVisionStream = function (fileObj) {
             || sideHasDv;
     });
 };
-var hasDataStream = function (fileObj) {
-    var ffprobe = (fileObj && (fileObj.ffprobeData
-        || fileObj.ffProbeData
-        || (fileObj.meta && fileObj.meta.ffProbeData))) || { streams: [] };
-    return (ffprobe.streams || []).some(function (s) { return s && s.codec_type === 'data'; });
-};
 var insertDolbyVisionArgs = function (args) {
     // For Dolby Vision streams, we only need -strict unofficial when copying.
     // Do NOT use bitstream filters (hevc_mp4toannexb) for MP4-to-MP4 copying
     // as they strip the dvcC box (Dolby Vision Configuration).
     // Do NOT change codec tags - let ffmpeg preserve the original (hev1/dvhe/etc).
-    var outputArgs = __spreadArray([], args, true);
-    if (!args.includes('-strict')) {
-        outputArgs.push('-strict', 'unofficial');
-    }
-    return outputArgs;
+    return args.includes('-strict') ? args.slice() : args.concat(['-strict', 'unofficial']);
+};
+var unchanged = function (args) {
+    args.jobLog('No need to process file, already as required');
+    return {
+        outputFileObj: args.inputFileObj,
+        outputNumber: 1,
+        variables: args.variables,
+    };
 };
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, cliArgs, _a, shouldProcess, streams, inputArgs, additionalInputs, idx, outputArgs, outputFilePath, spawnArgs, cli, res, tempFiles;
-    return __generator(this, function (_b) {
-        switch (_b.label) {
-            case 0:
-                lib = require('../../../../../methods/lib')();
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-param-reassign
-                args.inputs = lib.loadDefaultValues(normalizeInputs(args.inputs), details);
-                (0, flowUtils_1.checkFfmpegCommandInit)(args);
-                cliArgs = [];
-                cliArgs.push('-y');
-                cliArgs.push('-i');
-                cliArgs.push(args.inputFileObj._id);
-                _a = args.variables.ffmpegCommand, shouldProcess = _a.shouldProcess, streams = _a.streams;
-                additionalInputs = args.variables.ffmpegCommand.additionalInputs || [];
-                additionalInputs.forEach(function (input) {
-                    if (shouldProcess !== false) {
-                        shouldProcess = true;
-                    }
-                    cliArgs.push('-i');
-                    cliArgs.push(input);
-                });
-                streams = streams || [];
-                args.variables.ffmpegCommand.overallInputArguments = args.variables.ffmpegCommand.overallInputArguments || [];
-                if (args.variables.ffmpegCommand.overallInputArguments.length > 0 && shouldProcess !== false) {
-                    shouldProcess = true;
-                }
-                inputArgs = __spreadArray([], args.variables.ffmpegCommand.overallInputArguments, true);
-                var removedStreams = streams.filter(function (s) { return s.removed; });
-                var hadRemovedDataStream = removedStreams.some(function (s) { return s.codec_type === 'data'; });
-                if (removedStreams.length > 0 && shouldProcess !== false) {
-                    shouldProcess = true;
-                    args.variables.ffmpegCommand.shouldProcess = true;
-                }
-                streams = streams.filter(function (stream) {
-                    if (stream.removed && shouldProcess !== false) {
-                        shouldProcess = true;
-                    }
-                    return !stream.removed;
-                });
-                if (streams.length === 0) {
-                    args.jobLog('No streams mapped for new file');
-                    throw new Error('No streams mapped for new file');
-                }
-                streams.forEach(function (stream) {
-                    inputArgs.push.apply(inputArgs, stream.inputArgs || []);
-                    if ((stream.inputArgs || []).length > 0 && shouldProcess !== false) {
-                        shouldProcess = true;
-                    }
-                    if ((stream.outputArgs || []).length > 0 && shouldProcess !== false) {
-                        shouldProcess = true;
-                    }
-                });
-                idx = cliArgs.indexOf('-i');
-                cliArgs.splice.apply(cliArgs, __spreadArray([idx, 0], inputArgs, false));
-                args.variables.ffmpegCommand.overallOutputArguments = args.variables.ffmpegCommand.overallOutputArguments || [];
-                var configuredOutputArgs = args.variables.ffmpegCommand.overallOutputArguments.length > 0
-                    ? __spreadArray([], args.variables.ffmpegCommand.overallOutputArguments, true)
-                    : [];
-                var configuredHasMaps = configuredOutputArgs.some(function (arg) { return arg === '-map'; });
-                var targetContainer = (args.variables.ffmpegCommand.container
-                    || (args.inputFileObj && args.inputFileObj.container)
-                    || ((args.inputFileObj && args.inputFileObj._id) || '').split('.').pop()
-                    || 'mkv').toLowerCase();
-                var streamOutputArgs = buildOutputArgsFromStreams(streams);
-                outputArgs = configuredHasMaps && configuredOutputArgs.length > 0
-                    ? configuredOutputArgs
-                    : __spreadArray(__spreadArray([], streamOutputArgs, true), configuredOutputArgs, true);
-                var negativeMapArgs = buildNegativeMapArgs(removedStreams);
-                if (negativeMapArgs.length > 0) {
-                    outputArgs.push.apply(outputArgs, negativeMapArgs);
-                    if (shouldProcess !== false) {
-                        shouldProcess = true;
-                    }
-                }
-                if (hadRemovedDataStream) {
-                    // Guard against data streams sneaking back via implicit/default mapping.
-                    outputArgs.push('-dn');
-                    if (targetContainer === 'mp4') {
-                        // Strip chapter/stream metadata for data tracks when explicitly removed.
-                        outputArgs.push('-map_metadata:c');
-                        outputArgs.push('-1');
-                    }
-                }
-                if (shouldProcess && hasDolbyVisionStream(args.inputFileObj)) {
-                    outputArgs = insertDolbyVisionArgs(outputArgs);
-                }
-                if (outputArgs.length > 0) {
-                    cliArgs.push.apply(cliArgs, outputArgs);
-                    if (configuredOutputArgs.length > 0 && shouldProcess !== false) {
-                        shouldProcess = true;
-                    }
-                }
-                cliArgs = moveFilterArgsBeforeMaps(cliArgs);
-                cliArgs = moveMetadataArgsBeforeMaps(cliArgs);
-                // If no plugin requested processing and no meaningful change was requested, skip execution.
-                var inputExt = (args.inputFileObj.container
-                    || ((args.inputFileObj._id || "").split(".").pop())
-                    || "mkv").toLowerCase();
-                var requestedContainer = (args.variables.ffmpegCommand.container || inputExt).toLowerCase();
-                var containerChange = requestedContainer !== inputExt;
-                if (!shouldProcess && !containerChange && additionalInputs.length === 0 && args.variables.ffmpegCommand.overallInputArguments.length === 0 && args.variables.ffmpegCommand.overallOutputArguments.length === 0) {
-                    args.jobLog('No need to process file, already as required');
-                    return [2 /*return*/, {
-                            outputFileObj: args.inputFileObj,
-                            outputNumber: 1,
-                            variables: args.variables,
-                        }];
-                }
-                if (!shouldProcess) {
-                    args.jobLog('No need to process file, already as required');
-                    return [2 /*return*/, {
-                        outputFileObj: args.inputFileObj,
-                        outputNumber: 1,
-                        variables: args.variables,
-                    }];
-                }
-                // Respect the container of the current input if no explicit override was provided.
-                if (!args.variables.ffmpegCommand.container) {
-                    var ext = (args.inputFileObj.container
-                        || ((args.inputFileObj._id || "").split(".").pop())
-                        || "mkv").toLowerCase();
-                    args.variables.ffmpegCommand.container = ext;
-                }
-                outputFilePath = "".concat((0, fileUtils_1.getPluginWorkDir)(args), "/").concat((0, fileUtils_1.getFileName)(args.inputFileObj._id))
-                    + ".".concat(args.variables.ffmpegCommand.container);
-                cliArgs.push(outputFilePath);
-                spawnArgs = cliArgs.map(function (row) { return row.trim(); }).filter(function (row) { return row !== ''; });
-                args.jobLog('Processing file');
-                args.jobLog(JSON.stringify({
-                    spawnArgs: spawnArgs,
-                    outputFilePath: outputFilePath,
-                }));
-                args.updateWorker({
-                    CLIType: args.ffmpegPath,
-                    preset: spawnArgs.join(' '),
-                });
-                cli = new cliUtils_1.CLI({
-                    cli: args.ffmpegPath,
-                    spawnArgs: spawnArgs,
-                    spawnOpts: {},
-                    jobLog: args.jobLog,
-                    outputFilePath: outputFilePath,
-                    inputFileObj: args.inputFileObj,
-                    logFullCliOutput: args.logFullCliOutput,
-                    updateWorker: args.updateWorker,
-                    args: args,
-                });
-                return [4 /*yield*/, cli.runCli()];
-            case 1:
-                res = _b.sent();
-                if (res.cliExitCode !== 0) {
-                    args.jobLog('Running FFmpeg failed');
-                    throw new Error('FFmpeg failed');
-                }
-                args.logOutcome('tSuc');
-                // eslint-disable-next-line no-param-reassign
-                args.variables.ffmpegCommand.init = false;
-                tempFiles = args.variables.ffmpegCommand.tempFiles || [];
-                tempFiles.forEach(function (filePath) {
-                    try {
-                        var stats = fs.statSync(filePath);
-                        if (stats.isDirectory()) {
-                            fs.rmSync(filePath, { recursive: true, force: true });
-                        }
-                        else {
-                            fs.unlinkSync(filePath);
-                        }
-                    }
-                    catch (err) {
-                        args.jobLog("Cleanup warning: ".concat(filePath, " ").concat(err.message));
-                    }
-                });
-                return [2 /*return*/, {
-                    outputFileObj: {
-                        _id: outputFilePath,
-                    },
-                    outputNumber: 1,
-                    variables: args.variables,
-                }];
+var plugin = async function (args) {
+    var lib = require('../../../../../methods/lib')();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-param-reassign
+    args.inputs = lib.loadDefaultValues(normalizeInputs(args.inputs), details);
+    (0, flowUtils_1.checkFfmpegCommandInit)(args);
+    var command = args.variables.ffmpegCommand;
+    var probeStreams = getProbeStreams(args.inputFileObj);
+    var allStreams = command.streams || [];
+    var streams = allStreams.filter(function (stream) { return !stream.removed; });
+    if (streams.length === 0) {
+        args.jobLog('No streams mapped for new file');
+        throw new Error('No streams mapped for new file');
+    }
+    var additionalInputs = command.additionalInputs || [];
+    var overallInputArgs = command.overallInputArguments || [];
+    // Upstream plugins spell it "overallOuputArguments"; accept both, once.
+    var overallOutputArgs = (command.overallOutputArguments || []).slice();
+    var upstreamOutputArgs = command.overallOuputArguments || [];
+    if (upstreamOutputArgs.join('\n') !== overallOutputArgs.join('\n')) {
+        overallOutputArgs = overallOutputArgs.concat(upstreamOutputArgs);
+    }
+    // Work to do = anything differs from a plain copy of the input. Decided here from
+    // state, so no plugin can switch off another plugin's change.
+    var shouldProcess = command.shouldProcess === true
+        || !isInputLayout(streams, probeStreams)
+        || streams.some(function (stream) { return (stream.inputArgs || []).length > 0 || (stream.outputArgs || []).length > 0; })
+        || additionalInputs.length > 0
+        || overallInputArgs.length > 0
+        || overallOutputArgs.length > 0;
+    if (!shouldProcess) {
+        return unchanged(args);
+    }
+    var inputExt = (args.inputFileObj.container
+        || ((args.inputFileObj._id || '').split('.').pop())
+        || 'mkv').toLowerCase();
+    // Respect the container of the current input if no explicit override was provided.
+    if (!command.container) {
+        command.container = inputExt;
+    }
+    var targetContainer = String(command.container).toLowerCase();
+
+    var cliArgs = ['-y'];
+    cliArgs.push.apply(cliArgs, overallInputArgs);
+    streams.forEach(function (stream) { cliArgs.push.apply(cliArgs, stream.inputArgs || []); });
+    cliArgs.push('-i', args.inputFileObj._id);
+    additionalInputs.forEach(function (input) { cliArgs.push('-i', input); });
+
+    var pluginWorkDir = (0, fileUtils_1.getPluginWorkDir)(args);
+    var coverArt = planCoverArt(streams, probeStreams, targetContainer);
+    var coverStreams = coverArt.map(function (item) { return item.stream; });
+    var mappedStreams = streams.filter(function (stream) { return coverStreams.indexOf(stream) === -1; });
+    if (mappedStreams.length === 0) {
+        args.jobLog('No streams mapped for new file');
+        throw new Error('No streams mapped for new file');
+    }
+    var outputArgs = buildOutputArgsFromStreams(mappedStreams);
+    // "-attach" streams land after all mapped ones: attachment index continues from mapped fonts.
+    var attachmentIndex = mappedStreams.filter(function (stream) { return ffmpegTypeOf(stream) === 't'; }).length;
+    for (var c = 0; c < coverArt.length; c += 1) {
+        var item = coverArt[c];
+        var coverDir = path.join(pluginWorkDir, 'cover-'.concat(c));
+        fs.mkdirSync(coverDir, { recursive: true });
+        item.file = path.join(coverDir, item.name);
+        var extractArgs = ['-y', '-i', args.inputFileObj._id, '-map', '0:'.concat(item.stream.index), '-c', 'copy', '-frames:v', '1', '-update', '1', item.file];
+        args.jobLog('Extracting cover art: '.concat(extractArgs.join(' ')));
+        // eslint-disable-next-line no-await-in-loop
+        var extracted = await new cliUtils_1.CLI({
+            cli: args.ffmpegPath,
+            spawnArgs: extractArgs,
+            spawnOpts: {},
+            jobLog: args.jobLog,
+            outputFilePath: item.file,
+            inputFileObj: args.inputFileObj,
+            logFullCliOutput: args.logFullCliOutput,
+            updateWorker: args.updateWorker,
+            args: args,
+        }).runCli();
+        if (extracted.cliExitCode !== 0) {
+            args.jobLog('Extracting cover art failed');
+            throw new Error('FFmpeg failed');
+        }
+        var selector = '-metadata:s:t:'.concat(attachmentIndex + c);
+        outputArgs.push('-attach', item.file, selector, 'mimetype='.concat(item.mime), selector, 'filename='.concat(item.name));
+    }
+    outputArgs = outputArgs.concat(overallOutputArgs);
+    var keptIndexes = new Set(streams.map(function (stream) { return stream.index; }));
+    var droppedDataStream = probeStreams.some(function (s, pos) {
+        return s.codec_type === 'data' && !keptIndexes.has(typeof s.index === 'number' ? s.index : pos);
+    });
+    if (droppedDataStream) {
+        outputArgs.push('-dn');
+        if (targetContainer === 'mp4') {
+            // Strip chapter/stream metadata for data tracks when explicitly removed.
+            outputArgs.push('-map_metadata:c', '-1');
+        }
+    }
+    if (hasDolbyVisionStream(args.inputFileObj)) {
+        outputArgs = insertDolbyVisionArgs(outputArgs);
+    }
+    cliArgs.push.apply(cliArgs, outputArgs);
+    cliArgs = moveArgsBeforeMaps(cliArgs, isFilterArgument, false);
+    cliArgs = moveArgsBeforeMaps(cliArgs, isMetadataArgument, true);
+
+    var outputFilePath = "".concat(pluginWorkDir, "/").concat((0, fileUtils_1.getFileName)(args.inputFileObj._id))
+        + ".".concat(command.container);
+    cliArgs.push(outputFilePath);
+    var spawnArgs = cliArgs.map(function (row) { return row.trim(); }).filter(function (row) { return row !== ''; });
+    args.jobLog('Processing file');
+    args.jobLog(JSON.stringify({
+        spawnArgs: spawnArgs,
+        outputFilePath: outputFilePath,
+    }));
+    args.updateWorker({
+        CLIType: args.ffmpegPath,
+        preset: spawnArgs.join(' '),
+    });
+    var cli = new cliUtils_1.CLI({
+        cli: args.ffmpegPath,
+        spawnArgs: spawnArgs,
+        spawnOpts: {},
+        jobLog: args.jobLog,
+        outputFilePath: outputFilePath,
+        inputFileObj: args.inputFileObj,
+        logFullCliOutput: args.logFullCliOutput,
+        updateWorker: args.updateWorker,
+        args: args,
+    });
+    var res = await cli.runCli();
+    if (res.cliExitCode !== 0) {
+        args.jobLog('Running FFmpeg failed');
+        throw new Error('FFmpeg failed');
+    }
+    args.logOutcome('tSuc');
+    // eslint-disable-next-line no-param-reassign
+    args.variables.ffmpegCommand.init = false;
+    var tempFiles = (command.tempFiles || []).concat(coverArt.map(function (item) { return path.dirname(item.file); }));
+    tempFiles.forEach(function (filePath) {
+        try {
+            if (fs.statSync(filePath).isDirectory()) {
+                fs.rmSync(filePath, { recursive: true, force: true });
+            }
+            else {
+                fs.unlinkSync(filePath);
+            }
+        }
+        catch (err) {
+            args.jobLog("Cleanup warning: ".concat(filePath, " ").concat(err.message));
         }
     });
-}); };
+    return {
+        outputFileObj: {
+            _id: outputFilePath,
+        },
+        outputNumber: 1,
+        variables: args.variables,
+    };
+};
 exports.plugin = plugin;

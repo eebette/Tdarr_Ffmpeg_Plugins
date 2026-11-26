@@ -133,99 +133,9 @@ var streamsLikelyMatch = function (hdStream, candidate) {
     }
     return true;
 };
+// Absolute input index: exact for every stream type, nothing to recount downstream.
 var getMapArgs = function (stream) {
-    // Attached-pics (normalized to codec_type "attachment" by ffmpegCommandStart)
-    // and data streams cannot be addressed reliably by type selector: ffmpeg's
-    // "t" selector only matches real container attachments, so "0:t:N" hard-fails
-    // on attached-pic streams. Map them by absolute index instead.
-    if (stream.codec_type === "attachment" || stream.codec_type === "data") {
-        return ["-map", "0:".concat(stream.index)];
-    }
-    var selector = codecTypeSelector[stream.codec_type] || stream.codec_type || "";
-    var typeIndex = typeof stream.typeIndex === "number" ? stream.typeIndex : 0;
-    var optional = selector === "v" ? "" : "?";
-    return ["-map", "0:".concat(selector, ":").concat(typeIndex).concat(optional)];
-};
-var getOutputStreamIndex = function (streams, stream) {
-    var filtered = streams.filter(function (s) { return !s.removed; });
-    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
-    return position === -1 ? 0 : position;
-};
-var getOutputStreamTypeIndex = function (streams, stream) {
-    var filtered = streams.filter(function (s) { return !s.removed && s.codec_type === stream.codec_type; });
-    var position = filtered.findIndex(function (s) { return s.index === stream.index; });
-    return position === -1 ? 0 : position;
-};
-var applyPlaceholders = function (args, streams, stream) {
-    return args.map(function (arg) {
-        var updated = arg;
-        if (updated.includes("{outputIndex}")) {
-            updated = updated.replace("{outputIndex}", String(getOutputStreamIndex(streams, stream)));
-        }
-        if (updated.includes("{outputTypeIndex}")) {
-            updated = updated.replace("{outputTypeIndex}", String(getOutputStreamTypeIndex(streams, stream)));
-        }
-        return updated;
-    });
-};
-var normalizeCodecSelectors = function (outputArgs, streams, stream) {
-    var codecSelector = getCodecSelectorForStream(streams, stream);
-    return outputArgs.map(function (arg) {
-        if (/^-c:[a-z]+$/.test(arg)) {
-            return codecSelector;
-        }
-        if (/^-c:\d+$/.test(arg)) {
-            return codecSelector;
-        }
-        if (/^-c:[a-z]+:\d+$/.test(arg)) {
-            return codecSelector;
-        }
-        return arg;
-    });
-};
-var normalizeMapArgs = function (mapArgs, streams, stream) {
-    // Attached-pics/data streams: keep the absolute-index map from
-    // ffmpegCommandStart; type selectors ("t"/"d") mis-address them.
-    if (stream.codec_type === "attachment" || stream.codec_type === "data") {
-        return mapArgs;
-    }
-    var selector = codecTypeSelector[stream.codec_type] || stream.codec_type || "";
-    if (!selector) {
-        return mapArgs;
-    }
-    var sourceTypeIndex = typeof stream.sourceTypeIndex === "number"
-        ? stream.sourceTypeIndex
-        : getOutputStreamTypeIndex(streams, stream);
-    var mapTarget = "0:".concat(selector, ":").concat(sourceTypeIndex).concat(selector === "v" ? "" : "?");
-    return mapArgs.map(function (arg, idx) {
-        var isMapValue = idx > 0 && mapArgs[idx - 1] === "-map";
-        if (isMapValue && /^\d+:\d+$/.test(arg)) {
-            return mapTarget;
-        }
-        return arg;
-    });
-};
-var getCodecSelectorForStream = function (streams, stream) {
-    var selector = codecTypeSelector[stream.codec_type];
-    if (!selector) {
-        return "-c:".concat(getOutputStreamIndex(streams, stream));
-    }
-    return "-c:".concat(selector, ":").concat(getOutputStreamTypeIndex(streams, stream));
-};
-var buildOverallOutputArgs = function (streams) {
-    var activeStreams = (streams || []).filter(function (s) { return !s.removed; });
-    return activeStreams.reduce(function (acc, stream) {
-        var replacedArgs = applyPlaceholders(stream.outputArgs || [], activeStreams, stream);
-        var mapArgs = normalizeMapArgs(stream.mapArgs || [], activeStreams, stream);
-        var normalizedArgs = normalizeCodecSelectors(replacedArgs, activeStreams, stream);
-        var hasCodecFlag = normalizedArgs.some(function (arg) { return /^-(?:c|codec)(?::[a-z]+(?::\d+)?)?$/i.test(arg); });
-        var outputArgsForStream = hasCodecFlag
-            ? normalizedArgs
-            : [getCodecSelectorForStream(activeStreams, stream), "copy"].concat(normalizedArgs);
-        acc.push.apply(acc, mapArgs);
-        acc.push.apply(acc, outputArgsForStream);
-        return acc;
-    }, []);
+    return ["-map", "0:".concat(stream.index)];
 };
 var pickBitrate = function (stream) {
     var channels = stream.channels || 2;
@@ -251,10 +161,11 @@ var makeCopyArgs = function (stream, makeDefault) {
 var makeEac3Args = function (sourceAudio, makeDefault) {
     var disposition = makeDefault ? "default" : "0";
     var bitrate = pickBitrate(sourceAudio);
+    // {outputIndex}: bitrate for this stream only ("-b:a" would hit every audio encode)
     return [
         "-c:a",
         "eac3",
-        "-b:a",
+        "-b:{outputIndex}",
         bitrate,
         "-disposition:a:{outputTypeIndex}",
         disposition,
@@ -349,7 +260,6 @@ var plugin = function (args) {
 
     if (audioStreams.length === 0) {
         args.jobLog("File has no audio streams; skipping.");
-        args.variables.ffmpegCommand.shouldProcess = false;
         return {
             outputFileObj: args.inputFileObj,
             outputNumber: 1,
@@ -392,7 +302,6 @@ var plugin = function (args) {
     if (!shouldProcess) {
         args.jobLog("Audio already has suitable fallback; no changes needed.");
         console.log("audioEAC3Fallback: no-change (existing fallback present)");
-        args.variables.ffmpegCommand.shouldProcess = false;
         return {
             outputFileObj: args.inputFileObj,
             outputNumber: 1,
@@ -457,13 +366,6 @@ var plugin = function (args) {
             var clearDefault = convertedHdIds.has(entry.source.index) && sourceIsDefault;
             if (useFlowState) {
                 // Keep existing stream with all modifications from previous plugins
-                // Ensure sourceTypeIndex is set so normalizeMapArgs uses the correct
-                // source position (not the output position, which shifts when new
-                // streams are inserted before this one).
-                if (typeof entry.source.sourceTypeIndex !== "number") {
-                    entry.source.sourceTypeIndex =
-                        typeof sourceMeta.typeIndex === "number" ? sourceMeta.typeIndex : undefined;
-                }
                 if (clearDefault) {
                     entry.source.outputArgs = (entry.source.outputArgs || []).concat([
                         "-disposition:a:{outputTypeIndex}", "0"
@@ -547,17 +449,13 @@ var plugin = function (args) {
         || extension
         || "mkv";
 
-    var overallOutputArgs = buildOverallOutputArgs(outputStreams);
 
     console.log("audioEAC3Fallback: setting streams/args", {
         useFlowState: useFlowState,
         streams: outputStreams,
-        overallOutputArgs: overallOutputArgs,
     });
 
     args.variables.ffmpegCommand.streams = outputStreams;
-    args.variables.ffmpegCommand.overallInputArguments = [];
-    args.variables.ffmpegCommand.overallOutputArguments = overallOutputArgs;
     args.variables.ffmpegCommand.shouldProcess = true;
     args.variables.ffmpegCommand.container = container;
     args.variables.ffmpegCommand.init = true;
