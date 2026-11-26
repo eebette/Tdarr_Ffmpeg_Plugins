@@ -44,8 +44,9 @@ test("languages filtered, tracks reordered, cover dropped", async () => {
   });
   assert.deepEqual(r.after, [
     "v:h264",
-    // "original" = language of first audio stream (eng here), not of default track
-    "a:ac3:eng:6:a0*", "a:eac3:jpn:6:a4", "a:truehd:jpn:6:a1", "a:aac:eng:2:a3",
+    // Reorder Audio default: codec order first (eac3,ac3,aac,truehd,dts), then language.
+    // First track takes default flag; commentary last.
+    "a:eac3:jpn:6:a4*", "a:ac3:eng:6:a0", "a:truehd:jpn:6:a1", "a:aac:eng:2:a3",
     // subtitle order: codec first (srt before ass), then language
     "s:subrip:eng:s3*!", "s:subrip:jpn:s2", "s:ass:eng:s0", "s:ass:jpn:s4",
     // "Remove Attachments" node matches codec_name against "attachment": fonts stay
@@ -53,15 +54,14 @@ test("languages filtered, tracks reordered, cover dropped", async () => {
   ]);
 });
 
-test("original language first when first audio is not English", async () => {
+test("same codec: original language first, lossless after lossy", async () => {
   const r = await run("jpn-first", {
     audio: [{ codec: "truehd", ch: 6, lang: "jpn", default: true }, { codec: "ac3", ch: 6, lang: "eng" }, { codec: "ac3", ch: 6, lang: "jpn" }],
-    subs: [{ codec: "ass", lang: "jpn" }, { codec: "ass", lang: "eng", default: true }],
+    subs: [{ codec: "ass", lang: "jpn", default: true }, { codec: "ass", lang: "eng" }],
   });
   assert.deepEqual(r.after, [
     "v:h264",
-    // within a language lossy track goes ahead of lossless and takes default
-    "a:ac3:jpn:6:a2*", "a:truehd:jpn:6:a0", "a:ac3:eng:6:a1",
+    "a:ac3:jpn:6:a2*", "a:ac3:eng:6:a1", "a:truehd:jpn:6:a0",
     "s:ass:jpn:s0*", "s:ass:eng:s1",
   ]);
 });
@@ -69,15 +69,16 @@ test("original language first when first audio is not English", async () => {
 // Known gap: Reorder Subtitles re-asserts "-disposition:s:0 default" on a track that is
 // already default, so Execute remuxes a file that needs nothing. Costs time, not content.
 // The community "Reorder Streams" node sits after Reorder Audio. Its default channel sort
-// (7.1,5.1,2,1) would beat language order, and blank "channels" falls back to that default
-// (loadDefaultValues). Flows set processOrder "codecs,languages,streamTypes" on the node to
-// drop the channel step. Pinned: language order from Reorder Audio survives the node.
-test("Reorder Streams node: language order kept, fewer channels may stay first", async () => {
-  const r = await run("channels-vs-language", {
-    audio: [{ codec: "aac", ch: 2, lang: "jpn", default: true }, { codec: "ac3", ch: 6, lang: "eng" }],
-    subs: [{ codec: "ass", lang: "eng", default: true }],
+// (7.1,5.1,2,1) would undo Reorder Audio's codec order, and blank "channels" falls back to
+// that default (loadDefaultValues). Flows set processOrder "codecs,languages,streamTypes" on
+// the node to drop the channel step. Pinned on a layout seen live: stereo AC3 goes ahead of
+// 5.1 DTS (codec order) and takes default; node must not move 5.1 back to front.
+test("Reorder Streams node: no channel sort, Reorder Audio's order survives", async () => {
+  const r = await run("channels-vs-codec", {
+    audio: [{ codec: "dts", ch: 6, lang: "eng", default: true }, { codec: "ac3", ch: 2, lang: "eng" }],
+    subs: [{ codec: "subrip", lang: "eng", default: true }],
   });
-  assert.deepEqual(r.after, ["v:h264", "a:aac:jpn:2:a0*", "a:ac3:eng:6:a1", "s:ass:eng:s0*"]);
+  assert.deepEqual(r.after, ["v:h264", "a:ac3:eng:2:a1*", "a:dts:eng:6:a0", "s:subrip:eng:s0*"]);
 });
 
 test("nothing to change: file untouched", { todo: "subtitleReorder forces remux of clean file" }, async () => {
