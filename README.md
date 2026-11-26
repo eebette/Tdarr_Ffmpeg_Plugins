@@ -45,7 +45,7 @@ stream-copy it as an attachment.
 - `ffmpegCommand/Execute`: Runs FFmpeg with arguments built earlier in the flow. Respects per-stream input/output args, mapping, and container settings, and short-circuits when no processing is required.
 
 ### Audio
-- `audioEAC3Fallback/Audio: Ensure EAC3 Fallback`: Creates an EAC3 copy for TrueHD/DTS audio when missing, skips if AAC/AC3/EAC3/FLAC is already present, and leaves stream ordering/default handling to downstream steps.
+- `audioEAC3Fallback/Audio: Ensure EAC3 Fallback`: Creates an EAC3 copy for TrueHD/DTS audio when missing, skips if AAC/AC3/EAC3/FLAC is already present. `HD Track Placement`: `Move to front` (default) puts HD tracks, each with its fallback before it, ahead of all other audio; `Keep position` leaves audio order alone and inserts the new EAC3 right before its HD track.
 - `audioReorder/Reorder Audio Streams`: Reorders audio by codec and/or language preference (dropdown precedence), sets the first non-commentary track as default, and preserves other streams.
 
 ### Video

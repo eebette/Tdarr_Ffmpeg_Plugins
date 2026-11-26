@@ -103,12 +103,21 @@ test("cover art between fonts: all kept", async () => {
   ].sort());
 });
 
-// Known gap: plugin builds audio as "HD tracks (fallback before each) first, rest after".
-// Lossy track that sat ahead of HD track ends up behind it, in source files and after an
-// earlier Reorder Audio. Desired: insert EAC3 before its HD track, move nothing else.
-test("lossy track ahead of HD track keeps its place", { todo: "audioEAC3Fallback hoists HD tracks to front" }, async () => {
+// Default "Move to front": HD tracks (fallback before each) go ahead of all other audio.
+// Intended where player cannot direct play HD tracks: first track must be playable.
+test("HD Track Placement default: HD track with fallback moved ahead of lossy track", async () => {
   const r = await run("lossy-first", {
     audio: [{ codec: "ac3", ch: 2, lang: "jpn", default: true }, { codec: "truehd", ch: 6, lang: "eng" }],
   });
-  assert.deepEqual(r.after, ["v:h264", "a:ac3:jpn:2:a0*", "a:eac3:eng:6:a1", "a:truehd:eng:6:a1"]);
+  assert.deepEqual(r.after, ["v:h264", "a:eac3:eng:6:a1", "a:truehd:eng:6:a1", "a:ac3:jpn:2:a0*"]);
+});
+
+test("HD Track Placement keep position: EAC3 inserted before HD track, nothing moved", async () => {
+  const steps = chain.steps.map((s) => (s.pluginName === "audioEAC3Fallback" ? { ...s, inputs: { "HD Track Placement": "Keep position" } } : s));
+  const input = build({
+    audio: [{ codec: "ac3", ch: 2, lang: "jpn", default: true }, { codec: "truehd", ch: 6, lang: "eng" }, { codec: "aac", ch: 2, lang: "jpn" }],
+  }, "lossy-first-keep");
+  const result = await runChain(steps, fileObjFromFile(input), { label: "lossy-first-keep" });
+  assertNoError(result);
+  assert.deepEqual(describe(result.outputFileObj._id), ["v:h264", "a:ac3:jpn:2:a0*", "a:eac3:eng:6:a1", "a:truehd:eng:6:a1", "a:aac:jpn:2:a2"]);
 });

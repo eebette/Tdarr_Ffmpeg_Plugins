@@ -29,7 +29,19 @@ var details = function () { return ({
     requiresVersion: "2.11.01",
     sidebarPosition: 1,
     icon: "faVolumeUp",
-    inputs: [],
+    inputs: [
+        {
+            name: "HD Track Placement",
+            type: "string",
+            defaultValue: "Move to front",
+            inputUI: {
+                type: "dropdown",
+                options: ["Move to front", "Keep position"],
+            },
+            tooltip: "Move to front: HD tracks, each with its fallback, go ahead of all other audio. "
+                + "Keep position: audio order untouched, new EAC3 inserted right before its HD track.",
+        },
+    ],
     outputs: [
         {
             number: 1,
@@ -171,13 +183,33 @@ var makeEac3Args = function (sourceAudio, makeDefault) {
         disposition,
     ];
 };
-var buildAudioPlan = function (audioStreams, hdStreams, matches, conversions) {
+var buildAudioPlan = function (audioStreams, hdStreams, matches, conversions, keepPosition) {
     var added = new Set();
     var plan = [];
     var addEntry = function (entry) {
         plan.push(entry);
         added.add(entry.id);
     };
+    if (keepPosition) {
+        // Existing order stays; only insertion: new EAC3 right before its HD source.
+        audioStreams.forEach(function (stream) {
+            if (conversions.some(function (s) { return s.index === stream.index; })) {
+                addEntry({
+                    id: "new-eac3-".concat(stream.index),
+                    action: "transcode",
+                    source: stream,
+                    makeDefault: false,
+                });
+            }
+            addEntry({
+                id: stream.index,
+                action: "copy",
+                source: stream,
+                makeDefault: false,
+            });
+        });
+        return plan;
+    }
     hdStreams.forEach(function (stream) {
         var hdId = stream.index;
         var needsConversion = conversions.some(function (s) { return s.index === hdId; });
@@ -331,7 +363,10 @@ var plugin = function (args) {
     });
 
     // Build audio plan based on HD streams and needed conversions
-    var audioPlan = buildAudioPlan(audioStreams, hdStreams, matches, conversions);
+    var placementInput = (Array.isArray(inputs) ? inputs : []).find(function (i) { return i.name === "HD Track Placement"; });
+    var placement = normalize((placementInput && placementInput.value) || inputs["HD Track Placement"] || "Move to front");
+    var keepPosition = placement === "keepposition";
+    var audioPlan = buildAudioPlan(audioStreams, hdStreams, matches, conversions, keepPosition);
 
     // Track which HD streams are getting a new EAC3 so we can move the default flag
     var convertedHdIds = new Set(conversions.map(function (s) { return s.index; }));
