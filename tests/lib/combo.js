@@ -19,10 +19,10 @@ const local = (pluginName, inputs, frame) => ({ sourceRepo: "Local", pluginName,
 const community = (pluginName, inputs, frame) => ({ sourceRepo: "Community", pluginName, inputs, frame });
 const ALL = ["v", "a", "s", "t", "pic"];
 const STEPS = {
-  // addMove: EAC3 fallback also hoists HD tracks (each with its fallback) ahead of other
-  // audio, so it re-sorts what an earlier Reorder Audio decided. Known gap, see
-  // integration/eac3-fallback-chain.test.js todo.
+  // addMove: default "Move to front" puts HD tracks (each with its fallback) ahead of
+  // other audio, by design. eac3Keep = "Keep position": pure insertion.
   eac3: local("audioEAC3Fallback", {}, { addMove: ["a"] }),
+  eac3Keep: local("audioEAC3Fallback", { "HD Track Placement": "Keep position" }, { add: ["a"] }),
   audioLang: local("audioLanguageFilter", { Languages: "original,eng,jpn" }, { remove: ["a"] }),
   audioOrder: local("audioReorder", { "Language Order": "original,eng" }, { permute: ["a"] }),
   subLang: local("subtitleLanguageFilter", { Languages: "eng,jpn" }, { remove: ["s"] }),
