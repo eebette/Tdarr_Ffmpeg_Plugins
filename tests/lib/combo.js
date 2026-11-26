@@ -19,10 +19,11 @@ const local = (pluginName, inputs, frame) => ({ sourceRepo: "Local", pluginName,
 const community = (pluginName, inputs, frame) => ({ sourceRepo: "Community", pluginName, inputs, frame });
 const ALL = ["v", "a", "s", "t", "pic"];
 const STEPS = {
-  // addMove: default "Move to front" puts HD tracks (each with its fallback) ahead of
-  // other audio, by design. eac3Keep = "Keep position": pure insertion.
-  eac3: local("audioEAC3Fallback", {}, { addMove: ["a"] }),
-  eac3Keep: local("audioEAC3Fallback", { "HD Track Placement": "Keep position" }, { add: ["a"] }),
+  // Existing audio never moves; new EAC3 placed per "EAC3 Placement".
+  eac3: local("audioEAC3Fallback", {}, { add: ["a"] }),
+  eac3Before: local("audioEAC3Fallback", { "EAC3 Placement": "Before HD track" }, { add: ["a"] }),
+  eac3After: local("audioEAC3Fallback", { "EAC3 Placement": "After HD track" }, { add: ["a"] }),
+  eac3Last: local("audioEAC3Fallback", { "EAC3 Placement": "Last audio track" }, { add: ["a"] }),
   audioLang: local("audioLanguageFilter", { Languages: "original,eng,jpn" }, { remove: ["a"] }),
   audioOrder: local("audioReorder", { "Language Order": "original,eng" }, { permute: ["a"] }),
   subLang: local("subtitleLanguageFilter", { Languages: "eng,jpn" }, { remove: ["s"] }),
@@ -199,8 +200,7 @@ const frameViolations = (stepKey, before, after) => {
     if (prev.join(" ") === cur.join(" ")) continue;
     const ok = ((frame.remove || []).includes(kind) && isSubsequence(cur, prev))
       || ((frame.add || []).includes(kind) && isSubsequence(prev, cur))
-      || ((frame.permute || []).includes(kind) && prev.slice().sort().join(" ") === cur.slice().sort().join(" "))
-      || ((frame.addMove || []).includes(kind) && isSubsequence(prev.slice().sort(), cur.slice().sort()));
+      || ((frame.permute || []).includes(kind) && prev.slice().sort().join(" ") === cur.slice().sort().join(" "));
     if (!ok) out.push(`${stepKey} changed ${kind} streams: [${prev.join(" ")}] -> [${cur.join(" ")}]`);
   }
   return out;

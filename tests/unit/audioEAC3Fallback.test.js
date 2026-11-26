@@ -41,7 +41,7 @@ test("bitrate follows channel count", async () => {
 test("default flag moves to new EAC3 only when HD source was default", async () => {
   assert.deepEqual(
     await audioPlan(layout(V(), A("truehd", { lang: "jpn", default: true }), A("dts", { lang: "eng" }))),
-    ["1:eac3:640k*", "1:copy", "2:eac3:640k", "2:copy"],
+    ["1:eac3:640k*", "2:eac3:640k", "1:copy", "2:copy"],
   );
 });
 
@@ -62,7 +62,7 @@ test("fallback with more channels than HD track does not count", async () => {
 test("one fallback serves one HD track only", async () => {
   assert.deepEqual(
     await audioPlan(layout(V(), A("truehd", { lang: "eng" }), A("dts", { lang: "eng" }), A("ac3", { lang: "eng" }))),
-    ["1:copy", "3:copy", "2:eac3:640k", "2:copy"],
+    ["2:eac3:640k", "1:copy", "2:copy", "3:copy"],
   );
 });
 

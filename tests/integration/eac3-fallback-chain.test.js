@@ -1,7 +1,8 @@
 "use strict";
 // Chain under test (from flow fixture): Begin Command -> Audio: Ensure EAC3 Fallback -> Execute.
-// Contract: keep every input stream exactly once, same order; add one EAC3 before each
-// TrueHD/DTS track lacking fallback; default flag moves from HD track to its new EAC3.
+// Contract: keep every input stream exactly once, same order; add one EAC3 per TrueHD/DTS
+// track lacking fallback, placed per "EAC3 Placement" (default first audio track);
+// default flag moves from HD track to its new EAC3.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { fileObjFromFile, runChain, assertNoError } = require("../lib/harness");
@@ -58,8 +59,8 @@ test("several HD tracks, subtitles kept in order with flags", async () => {
   });
   assert.deepEqual(r.after, [
     "v:h264",
-    "a:eac3:jpn:6:a0*", "a:truehd:jpn:6:a0",
-    "a:eac3:eng:6:a1", "a:dts:eng:6:a1",
+    "a:eac3:jpn:6:a0*", "a:eac3:eng:6:a1",
+    "a:truehd:jpn:6:a0", "a:dts:eng:6:a1",
     "a:aac:eng:2:a2",
     "s:ass:eng:s0*", "s:subrip:eng:s1!", "s:ass:jpn:s2",
   ]);
@@ -103,21 +104,33 @@ test("cover art between fonts: all kept", async () => {
   ].sort());
 });
 
-// Default "Move to front": HD tracks (fallback before each) go ahead of all other audio.
-// Intended where player cannot direct play HD tracks: first track must be playable.
-test("HD Track Placement default: HD track with fallback moved ahead of lossy track", async () => {
-  const r = await run("lossy-first", {
-    audio: [{ codec: "ac3", ch: 2, lang: "jpn", default: true }, { codec: "truehd", ch: 6, lang: "eng" }],
+// Source: lossy default, two HD tracks without fallback, lossy tail. Existing order must survive.
+const PLACEMENT_AUDIO = [
+  { codec: "ac3", ch: 2, lang: "jpn", default: true },
+  { codec: "truehd", ch: 6, lang: "eng" },
+  { codec: "dts", ch: 6, lang: "fre" },
+  { codec: "aac", ch: 2, lang: "jpn" },
+];
+const AC3 = "a:ac3:jpn:2:a0*";
+const THD = "a:truehd:eng:6:a1";
+const DTS = "a:dts:fre:6:a2";
+const AAC = "a:aac:jpn:2:a3";
+const E_ENG = "a:eac3:eng:6:a1";
+const E_FRE = "a:eac3:fre:6:a2";
+const PLACEMENTS = {
+  "": [E_ENG, E_FRE, AC3, THD, DTS, AAC], // input unset: default
+  "First audio track": [E_ENG, E_FRE, AC3, THD, DTS, AAC],
+  "Before HD track": [AC3, E_ENG, THD, E_FRE, DTS, AAC],
+  "After HD track": [AC3, THD, E_ENG, DTS, E_FRE, AAC],
+  "Last audio track": [AC3, THD, DTS, AAC, E_ENG, E_FRE],
+};
+Object.keys(PLACEMENTS).forEach((placement) => {
+  test(`EAC3 Placement "${placement || "(default)"}": new EAC3 placed, existing audio order kept`, async () => {
+    const steps = chain.steps.map((s) => (s.pluginName === "audioEAC3Fallback" && placement ? { ...s, inputs: { "EAC3 Placement": placement } } : s));
+    const label = `placement-${placement.toLowerCase().replace(/ /g, "-") || "default"}`;
+    const input = build({ audio: PLACEMENT_AUDIO }, label);
+    const result = await runChain(steps, fileObjFromFile(input), { label });
+    assertNoError(result);
+    assert.deepEqual(describe(result.outputFileObj._id), ["v:h264", ...PLACEMENTS[placement]]);
   });
-  assert.deepEqual(r.after, ["v:h264", "a:eac3:eng:6:a1", "a:truehd:eng:6:a1", "a:ac3:jpn:2:a0*"]);
-});
-
-test("HD Track Placement keep position: EAC3 inserted before HD track, nothing moved", async () => {
-  const steps = chain.steps.map((s) => (s.pluginName === "audioEAC3Fallback" ? { ...s, inputs: { "HD Track Placement": "Keep position" } } : s));
-  const input = build({
-    audio: [{ codec: "ac3", ch: 2, lang: "jpn", default: true }, { codec: "truehd", ch: 6, lang: "eng" }, { codec: "aac", ch: 2, lang: "jpn" }],
-  }, "lossy-first-keep");
-  const result = await runChain(steps, fileObjFromFile(input), { label: "lossy-first-keep" });
-  assertNoError(result);
-  assert.deepEqual(describe(result.outputFileObj._id), ["v:h264", "a:ac3:jpn:2:a0*", "a:eac3:eng:6:a1", "a:truehd:eng:6:a1", "a:aac:jpn:2:a2"]);
 });

@@ -31,15 +31,16 @@ var details = function () { return ({
     icon: "faVolumeUp",
     inputs: [
         {
-            name: "HD Track Placement",
+            name: "EAC3 Placement",
             type: "string",
-            defaultValue: "Move to front",
+            defaultValue: "First audio track",
             inputUI: {
                 type: "dropdown",
-                options: ["Move to front", "Keep position"],
+                options: ["First audio track", "Before HD track", "After HD track", "Last audio track"],
             },
-            tooltip: "Move to front: HD tracks, each with its fallback, go ahead of all other audio. "
-                + "Keep position: audio order untouched, new EAC3 inserted right before its HD track.",
+            tooltip: "Where new EAC3 track goes. Existing audio tracks never move. "
+                + "First/Last audio track: ahead of / behind all audio. "
+                + "Before/After HD track: next to track it was made from.",
         },
     ],
     outputs: [
@@ -183,73 +184,33 @@ var makeEac3Args = function (sourceAudio, makeDefault) {
         disposition,
     ];
 };
-var buildAudioPlan = function (audioStreams, hdStreams, matches, conversions, keepPosition) {
-    var added = new Set();
-    var plan = [];
-    var addEntry = function (entry) {
-        plan.push(entry);
-        added.add(entry.id);
+/**
+ * Existing audio keeps input order. Only new EAC3 tracks get placed.
+ *
+ * :param audioStreams: audio streams, input order
+ * :param conversions: HD streams that get new EAC3
+ * :param placement: "first" | "before" | "after" | "last"
+ * :return: [{id, action, source, makeDefault}] in output order
+ */
+var buildAudioPlan = function (audioStreams, conversions, placement) {
+    var isConverted = function (stream) {
+        return conversions.some(function (s) { return s.index === stream.index; });
     };
-    if (keepPosition) {
-        // Existing order stays; only insertion: new EAC3 right before its HD source.
-        audioStreams.forEach(function (stream) {
-            if (conversions.some(function (s) { return s.index === stream.index; })) {
-                addEntry({
-                    id: "new-eac3-".concat(stream.index),
-                    action: "transcode",
-                    source: stream,
-                    makeDefault: false,
-                });
-            }
-            addEntry({
-                id: stream.index,
-                action: "copy",
-                source: stream,
-                makeDefault: false,
-            });
-        });
-        return plan;
-    }
-    hdStreams.forEach(function (stream) {
-        var hdId = stream.index;
-        var needsConversion = conversions.some(function (s) { return s.index === hdId; });
-        var matched = matches.get(hdId);
-        if (needsConversion) {
-            addEntry({
-                id: "new-eac3-".concat(hdId),
-                action: "transcode",
-                source: stream,
-                makeDefault: false,
-            });
-        }
-        if (!added.has(hdId)) {
-            addEntry({
-                id: hdId,
-                action: "copy",
-                source: stream,
-                makeDefault: false,
-            });
-        }
-        if (matched && !added.has(matched.index)) {
-            addEntry({
-                id: matched.index,
-                action: "copy",
-                source: matched,
-                makeDefault: false,
-            });
-        }
-    });
+    var newEntry = function (stream) {
+        return { id: "new-eac3-".concat(stream.index), action: "transcode", source: stream, makeDefault: false };
+    };
+    var fresh = audioStreams.filter(isConverted).map(newEntry);
+    var plan = placement === "first" ? fresh.slice() : [];
     audioStreams.forEach(function (stream) {
-        if (!added.has(stream.index)) {
-            addEntry({
-                id: stream.index,
-                action: "copy",
-                source: stream,
-                makeDefault: false,
-            });
+        if (placement === "before" && isConverted(stream)) {
+            plan.push(newEntry(stream));
+        }
+        plan.push({ id: stream.index, action: "copy", source: stream, makeDefault: false });
+        if (placement === "after" && isConverted(stream)) {
+            plan.push(newEntry(stream));
         }
     });
-    return plan;
+    return placement === "last" ? plan.concat(fresh) : plan;
 };
 var plugin = function (args) {
     var lib = require("../../../../../methods/lib")();
@@ -363,10 +324,11 @@ var plugin = function (args) {
     });
 
     // Build audio plan based on HD streams and needed conversions
-    var placementInput = (Array.isArray(inputs) ? inputs : []).find(function (i) { return i.name === "HD Track Placement"; });
-    var placement = normalize((placementInput && placementInput.value) || inputs["HD Track Placement"] || "Move to front");
-    var keepPosition = placement === "keepposition";
-    var audioPlan = buildAudioPlan(audioStreams, hdStreams, matches, conversions, keepPosition);
+    var placementInput = (Array.isArray(inputs) ? inputs : []).find(function (i) { return i.name === "EAC3 Placement"; });
+    var placementValue = normalize((placementInput && placementInput.value) || inputs["EAC3 Placement"]);
+    // Unknown value = default
+    var placement = { beforehdtrack: "before", afterhdtrack: "after", lastaudiotrack: "last" }[placementValue] || "first";
+    var audioPlan = buildAudioPlan(audioStreams, conversions, placement);
 
     // Track which HD streams are getting a new EAC3 so we can move the default flag
     var convertedHdIds = new Set(conversions.map(function (s) { return s.index; }));
